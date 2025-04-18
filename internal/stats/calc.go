@@ -2,16 +2,16 @@ package stats
 
 import "github.com/ross1116/pokebattlecli/internal/pokemon"
 
-func HpCalc(baseHp int) float64 {
+func HpCalc(basehp int) float64 {
 	iv := 31
 	level := 100
-	return float64(((2*baseHp+iv+31)*level)/100 + 10)
+	return float64((2*basehp+iv)*level/100 + level + 10)
 }
 
-func StatCalc(baseStat int) float64 {
+func StatCalc(basestat int) float64 {
 	iv := 31
 	level := 100
-	return float64(((2*baseStat+iv+31)*level)/100 + 5)
+	return float64((2*basestat+iv)*level/100 + 5)
 }
 
 func GetStat(p *pokemon.Pokemon, statName string) int {
