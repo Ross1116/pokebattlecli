@@ -76,6 +76,11 @@ func (server *Server) HandleMatchmake(msg map[string]string, conn net.Conn) {
 		return
 	}
 
+	if server.IsInLobby(player) {
+		log.Printf("Player %s is already in a match", username)
+		return
+	}
+
 	if server.IsInLobby(opponentClient) {
 		log.Printf("Opponent %s is already in a match", opponent)
 		return
@@ -135,12 +140,8 @@ func (server *Server) HandleReconnection(msg map[string]string, conn net.Conn) {
 }
 
 func (server *Server) IsInLobby(client *Client) bool {
-	for _, lobby := range server.Lobbies {
-		if lobby.player1 == client || lobby.player2 == client {
-			return true
-		}
-	}
-	return false
+	_, exists := server.Lobbies[client.Username]
+	return exists
 }
 
 func (server *Server) startGame(lobby *Lobby) {
@@ -163,4 +164,3 @@ func (server *Server) startGame(lobby *Lobby) {
 	delete(server.Lobbies, lobby.player1.Username)
 	delete(server.Lobbies, lobby.player2.Username)
 }
-
