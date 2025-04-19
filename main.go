@@ -12,10 +12,7 @@ import (
 func main() {
 	start := time.Now()
 
-	playerSquad, enemySquad, playerMovesets, enemyMovesets := battle.SetupFullSquads()
-
-	playerActiveIndex := 0
-	enemyActiveIndex := 0
+	playerSquad, enemySquad, playerMovesets, enemyMovesets, playerActiveIndex, enemyActiveIndex := battle.SetupFullSquads()
 
 	playerMaxHPs := make([]float64, len(playerSquad))
 	enemyMaxHPs := make([]float64, len(enemySquad))
@@ -93,10 +90,9 @@ func main() {
 			continue
 		}
 
-		fmt.Printf("You used %s!\n", moveData.Name)
-		damage, percent := battle.DamageCalc(playerSquad[playerActiveIndex].Base, enemySquad[enemyActiveIndex].Base, moveData)
-		enemySquad[enemyActiveIndex].ApplyDamage(damage)
-		fmt.Printf("Dealt %d damage (~%.2f%% of HP).\n", damage, percent)
+		fmt.Printf("\nYou used %s!\n", moveData.Name)
+
+		battle.ProcessPlayerTurn(playerSquad[playerActiveIndex], enemySquad[enemyActiveIndex], moveData)
 
 		if enemySquad[enemyActiveIndex].Fainted {
 			newEnemyIndex := battle.NextAvailablePokemon(enemyPokemonSquad, enemyActiveIndex)
@@ -117,7 +113,8 @@ func main() {
 				fmt.Printf("Enemy switched to %s!\n", enemyBattlePokemon.Base.Name)
 			}
 		} else {
-			battle.EnemyAttack(enemySquad[enemyActiveIndex], playerSquad[playerActiveIndex], enemyMovesets[enemyActiveIndex])
+			moveDataEnemy := enemyMovesets[enemyActiveIndex][rand.Intn(len(enemyMovesets[enemyActiveIndex]))]
+			battle.ProcessEnemyTurn(playerSquad[playerActiveIndex], enemySquad[enemyActiveIndex], moveDataEnemy)
 		}
 
 		if playerSquad[playerActiveIndex].Fainted {

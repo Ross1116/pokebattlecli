@@ -70,14 +70,16 @@ func DamageCalc(attacker *pokemon.Pokemon, defender *pokemon.Pokemon, move *poke
 	finalDmg := baseDmg * stab * effectiveness * randomFactor
 
 	critChance := rand.Float64() * 100
+	wasCrit := critChance < 6.25
 	if critChance < 6.25 {
 		fmt.Println("Critical hit!")
 		finalDmg *= 1.5
 	}
 
-	fmt.Printf("\nDEBUG: BaseDmg: %.2f | STAB: %.2f | TypeEff: %.2f | Random: %.2f | FinalDmg: %.2f\n", baseDmg, stab, effectiveness, randomFactor, finalDmg)
+	fmt.Printf("\nDEBUG: Atk:%d | Def: %d | Power: %d | BaseDmg: %.2f | STAB: %.2f | TypeEff: %.2f | Random: %.2f | Crit: %v | FinalDmg: %.2f\n",
+		atkStat, defStat, move.Power, baseDmg, stab, effectiveness, randomFactor, wasCrit, finalDmg)
 
-	rounded := int(math.Round(finalDmg))
+	rounded := int(math.Floor(finalDmg))
 	baseHp := stats.GetStat(defender, "hp")
 	totalHp := stats.HpCalc(baseHp)
 	percent := (finalDmg / totalHp) * 100

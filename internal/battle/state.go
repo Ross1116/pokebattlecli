@@ -6,11 +6,14 @@ import (
 )
 
 type BattlePokemon struct {
-	Base      *pokemon.Pokemon
-	CurrentHP float64
-	MovePP    map[string]int
-	Status    string
-	Fainted   bool
+	Base        *pokemon.Pokemon
+	CurrentHP   float64
+	MovePP      map[string]int
+	Status      string
+	StatusTurns int
+	Fainted     bool
+	StatStages  map[string]int
+	Volatile    map[string]bool
 }
 
 func NewBattlePokemon(p *pokemon.Pokemon, moves []*pokemon.MoveInfo) *BattlePokemon {
@@ -28,16 +31,18 @@ func NewBattlePokemon(p *pokemon.Pokemon, moves []*pokemon.MoveInfo) *BattlePoke
 	}
 
 	return &BattlePokemon{
-		Base:      p,
-		CurrentHP: stats.HpCalc(baseHp),
-		MovePP:    movePP,
-		Status:    "",
-		Fainted:   false,
+		Base:       p,
+		CurrentHP:  stats.HpCalc(baseHp),
+		MovePP:     movePP,
+		Status:     "",
+		Fainted:    false,
+		StatStages: make(map[string]int),
+		Volatile:   make(map[string]bool),
 	}
 }
 
-func (bp *BattlePokemon) ApplyDamage(dmg int) {
-	bp.CurrentHP -= float64(dmg)
+func (bp *BattlePokemon) ApplyDamage(dmg float64) {
+	bp.CurrentHP -= dmg
 	if bp.CurrentHP <= 0 {
 		bp.CurrentHP = 0
 		bp.Fainted = true
@@ -51,3 +56,25 @@ func (bp *BattlePokemon) UseMove(moveName string) bool {
 	}
 	return false
 }
+
+func (bp *BattlePokemon) ApplyStatus(newStatus string) {
+	bp.Status = newStatus
+}
+
+func (bp *BattlePokemon) ApplyStatusWithDuration(status string, turns int) {
+	bp.Status = status
+	bp.StatusTurns = turns
+}
+
+func (bp *BattlePokemon) ApplyStatStage(stat string, stage int) {
+	bp.StatStages[stat] += stage
+}
+
+func (bp *BattlePokemon) ApplyVolatileEffect(effect string) {
+	bp.Volatile[effect] = true
+}
+
+func (bp *BattlePokemon) RemoveVolatileEffect(effect string) {
+	delete(bp.Volatile, effect)
+}
+

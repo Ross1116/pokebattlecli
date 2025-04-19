@@ -15,7 +15,7 @@ func EnemyAttack(attacker, defender *BattlePokemon, moveSet []*pokemon.MoveInfo)
 	if attacker.MovePP[opponentMoveData.Name] > 0 {
 		attacker.UseMove(opponentMoveData.Name)
 		opponentDamage, opponentPercent := DamageCalc(attacker.Base, defender.Base, opponentMoveData)
-		defender.ApplyDamage(opponentDamage)
+		defender.ApplyDamage(float64(opponentDamage))
 
 		fmt.Printf("%s used %s! It dealt %d damage! (~%.2f%% of your Pokémon's HP)\n",
 			attacker.Base.Name, opponentMoveData.Name, opponentDamage, opponentPercent)
