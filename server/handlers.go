@@ -1,36 +1,51 @@
 package server
 
 import (
+	"fmt"
 	"log"
 	"net"
 )
 
-func (server *Server) handleRegistration(msg map[string]string, conn net.Conn) {
+func (server *Server) HandleRegistration(msg map[string]string, conn net.Conn) {
 	username := msg["username"]
 	if username == "" {
 		log.Println("Username cannot be empty")
 		return
 	}
 
-	if _, exists := server.clients[username]; exists {
-		log.Printf("Username %s is already taken", username)
+	if existingClient, ok := server.clients[username]; ok {
+		if existingClient.Conn != nil {
+			log.Printf("Player %s is already connected. Disconnecting the previous client...", username)
+			existingClient.Conn.Close()
+			log.Printf("Disconnected previous connection of player %s", username)
+		}
+		existingClient.Conn = conn
+		log.Printf("Player %s reconnected", username)
+
+		server.SendResponse(conn, Response{
+			Type: "reconnect",
+			Message: map[string]interface{}{
+				"username": username,
+				"status":   "Reconnected successfully",
+			},
+		})
 		return
 	}
 
-	client := &Client{conn: conn, username: username}
-	server.clients[username] = client
+	newClient := &Client{Username: username, Conn: conn}
+	server.clients[username] = newClient
 	log.Printf("Player %s registered successfully", username)
 
-	response := Response{
-		Type: "registration_success",
+	server.SendResponse(conn, Response{
+		Type: "registration",
 		Message: map[string]interface{}{
 			"username": username,
+			"status":   fmt.Sprintf("Player %s registered successfully", username),
 		},
-	}
-	server.SendResponse(conn, response)
+	})
 }
 
-func (server *Server) handleGetPlayers(conn net.Conn) {
+func (server *Server) HandleGetPlayers(conn net.Conn) {
 	var players []string
 	for username := range server.clients {
 		players = append(players, username)
@@ -46,7 +61,7 @@ func (server *Server) handleGetPlayers(conn net.Conn) {
 	server.SendResponse(conn, response)
 }
 
-func (server *Server) handleMatchmake(msg map[string]string, conn net.Conn) {
+func (server *Server) HandleMatchmake(msg map[string]string, conn net.Conn) {
 	username := msg["username"]
 	opponent := msg["opponent"]
 
@@ -61,24 +76,24 @@ func (server *Server) handleMatchmake(msg map[string]string, conn net.Conn) {
 		return
 	}
 
-	if server.isInLobby(opponentClient) {
+	if server.IsInLobby(opponentClient) {
 		log.Printf("Opponent %s is already in a match", opponent)
 		return
 	}
 
 	lobby := &Lobby{player1: player, player2: opponentClient}
-	server.lobbies[username] = lobby
-	server.lobbies[opponent] = lobby
+	server.Lobbies[username] = lobby
+	server.Lobbies[opponent] = lobby
 
 	log.Printf("Match started between %s and %s", username, opponent)
 
-	server.SendResponse(player.conn, Response{
+	server.SendResponse(player.Conn, Response{
 		Type: "match_start",
 		Message: map[string]interface{}{
 			"opponent": opponent,
 		},
 	})
-	server.SendResponse(opponentClient.conn, Response{
+	server.SendResponse(opponentClient.Conn, Response{
 		Type: "match_start",
 		Message: map[string]interface{}{
 			"opponent": username,
@@ -88,8 +103,39 @@ func (server *Server) handleMatchmake(msg map[string]string, conn net.Conn) {
 	server.startGame(lobby)
 }
 
-func (server *Server) isInLobby(client *Client) bool {
-	for _, lobby := range server.lobbies {
+func (server *Server) HandleDisconnection(conn net.Conn) {
+	for username, client := range server.clients {
+		if client.Conn == conn {
+			log.Printf("Player %s disconnected", username)
+
+			delete(server.clients, username)
+
+			for key, lobby := range server.Lobbies {
+				if lobby.player1.Username == username || lobby.player2.Username == username {
+					delete(server.Lobbies, key)
+				}
+			}
+			return
+		}
+	}
+}
+
+func (server *Server) HandleReconnection(msg map[string]string, conn net.Conn) {
+	username := msg["username"]
+
+	if existingClient, ok := server.clients[username]; ok {
+		if existingClient.Conn != nil {
+			log.Printf("Player %s is already connected", username)
+			existingClient.Conn.Close()
+		}
+	}
+
+	newClient := &Client{Username: username, Conn: conn}
+	server.clients[username] = newClient
+}
+
+func (server *Server) IsInLobby(client *Client) bool {
+	for _, lobby := range server.Lobbies {
 		if lobby.player1 == client || lobby.player2 == client {
 			return true
 		}
@@ -98,22 +144,23 @@ func (server *Server) isInLobby(client *Client) bool {
 }
 
 func (server *Server) startGame(lobby *Lobby) {
-	log.Println("Game started between", lobby.player1.username, "and", lobby.player2.username)
+	log.Println("Game started between", lobby.player1.Username, "and", lobby.player2.Username)
 
-	server.SendResponse(lobby.player1.conn, Response{
+	server.SendResponse(lobby.player1.Conn, Response{
 		Type: "game_end",
 		Message: map[string]interface{}{
 			"result": "win",
 		},
 	})
-	server.SendResponse(lobby.player2.conn, Response{
+
+	server.SendResponse(lobby.player2.Conn, Response{
 		Type: "game_end",
 		Message: map[string]interface{}{
 			"result": "lose",
 		},
 	})
 
-	delete(server.lobbies, lobby.player1.username)
-	delete(server.lobbies, lobby.player2.username)
+	delete(server.Lobbies, lobby.player1.Username)
+	delete(server.Lobbies, lobby.player2.Username)
 }
 

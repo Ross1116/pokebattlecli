@@ -12,16 +12,12 @@ func New(config *Config) *Server {
 		host:    config.Host,
 		port:    config.Port,
 		clients: make(map[string]*Client),
-		lobbies: make(map[string]*Lobby),
+		Lobbies: make(map[string]*Lobby),
 	}
 }
 
 func (s *Server) Clients() map[string]*Client {
 	return s.clients
-}
-
-func (c *Client) Username() string {
-	return c.username
 }
 
 func (server *Server) Run() {
@@ -38,7 +34,7 @@ func (server *Server) Run() {
 			log.Println("Error accepting connection:", err)
 			continue
 		}
-		go server.handleClient(conn)
+		go server.HandleClient(conn)
 	}
 }
 
@@ -55,30 +51,35 @@ func (server *Server) SendResponse(conn net.Conn, response Response) {
 	}
 }
 
-func (server *Server) handleClient(conn net.Conn) {
+func (server *Server) HandleClient(conn net.Conn) {
 	defer conn.Close()
+	defer server.HandleDisconnection(conn)
 
 	buf := make([]byte, 1024)
-	n, err := conn.Read(buf)
-	if err != nil {
-		log.Println("Error reading from client:", err)
-		return
-	}
 
-	var msg map[string]string
-	if err := json.Unmarshal(buf[:n], &msg); err != nil {
-		log.Println("Invalid message format from client:", err)
-		return
-	}
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			log.Println("Error reading from client:", err)
+			return
+		}
 
-	switch msg["type"] {
-	case "register":
-		server.handleRegistration(msg, conn)
-	case "get_players":
-		server.handleGetPlayers(conn)
-	case "matchmake":
-		server.handleMatchmake(msg, conn)
-	default:
-		log.Println("Unknown message type:", msg["type"])
+		var msg map[string]string
+		if err := json.Unmarshal(buf[:n], &msg); err != nil {
+			log.Println("Invalid message format from client:", err)
+			return
+		}
+
+		switch msg["type"] {
+		case "register":
+			server.HandleRegistration(msg, conn)
+		case "get_players":
+			server.HandleGetPlayers(conn)
+		case "matchmake":
+			server.HandleMatchmake(msg, conn)
+		default:
+			log.Println("Unknown message type:", msg["type"])
+		}
 	}
 }
+

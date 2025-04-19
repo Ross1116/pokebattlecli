@@ -6,12 +6,12 @@ type Server struct {
 	host    string
 	port    string
 	clients map[string]*Client
-	lobbies map[string]*Lobby
+	Lobbies map[string]*Lobby
 }
 
 type Client struct {
-	conn     net.Conn
-	username string
+	Conn     net.Conn
+	Username string
 }
 
 type Lobby struct {
