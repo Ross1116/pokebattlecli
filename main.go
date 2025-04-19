@@ -57,7 +57,6 @@ func main() {
 				playerActiveIndex = switchChoice - 1
 				fmt.Printf("You switched to %s!\n", playerSquad[playerActiveIndex].Base.Name)
 
-				// Enemy makes its move after the switch
 				enemyMoveData := enemyMovesets[enemyActiveIndex][rand.IntN(len(enemyMovesets[enemyActiveIndex]))]
 				if enemySquad[enemyActiveIndex].MovePP[enemyMoveData.Name] == 0 {
 					fmt.Println("Enemy tried to use", enemyMoveData.Name, "but it has no PP!")
@@ -65,10 +64,8 @@ func main() {
 					fmt.Printf("Enemy %s uses %s!\n", enemySquad[enemyActiveIndex].Base.Name, enemyMoveData.Name)
 					enemySquad[enemyActiveIndex].UseMove(enemyMoveData.Name)
 
-					// Process the enemy move against the switched-in Pokémon
 					battle.ProcessEnemyTurn(playerSquad[playerActiveIndex], enemySquad[enemyActiveIndex], enemyMoveData)
 
-					// Check if player's Pokémon fainted
 					if playerSquad[playerActiveIndex].Fainted {
 						fmt.Printf("\nYour %s has fainted. Choose a replacement.\n", playerSquad[playerActiveIndex].Base.Name)
 						newIndex := battle.SelectPokemon(playerPokemonSquad)
@@ -83,7 +80,6 @@ func main() {
 			}
 		}
 
-		// Normal move execution
 		if choice < 1 || choice > 4 {
 			fmt.Println("Invalid choice. Please select a valid action.")
 			continue
