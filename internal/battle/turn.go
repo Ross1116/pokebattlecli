@@ -8,15 +8,15 @@ import (
 	"github.com/ross1116/pokebattlecli/internal/stats"
 )
 
-func ResolveTurn(player *BattlePokemon, enemy *BattlePokemon, playerMoves []*pokemon.MoveInfo, enemyMoves []*pokemon.MoveInfo) (*BattlePokemon, *BattlePokemon, *pokemon.MoveInfo, *pokemon.MoveInfo) {
-	if playerSwitching := isSwitching(playerMoves); playerSwitching {
+func ResolveTurn(player *BattlePokemon, enemy *BattlePokemon, playerMove *pokemon.MoveInfo, enemyMove *pokemon.MoveInfo) (*BattlePokemon, *BattlePokemon, *pokemon.MoveInfo, *pokemon.MoveInfo) {
+	if isSwitching(playerMove) {
 		return player, enemy, nil, nil
-	} else if enemySwitching := isSwitching(enemyMoves); enemySwitching {
+	} else if isSwitching(enemyMove) {
 		return enemy, player, nil, nil
 	}
 
-	playerPriority := getMovePriority(player, playerMoves)
-	enemyPriority := getMovePriority(enemy, enemyMoves)
+	playerPriority := getMovePriority(playerMove)
+	enemyPriority := getMovePriority(enemyMove)
 
 	if playerPriority == enemyPriority {
 		playerSpeed := stats.StatCalc(stats.GetStat(player.Base, "speed"))
@@ -24,41 +24,33 @@ func ResolveTurn(player *BattlePokemon, enemy *BattlePokemon, playerMoves []*pok
 
 		if playerSpeed == enemySpeed {
 			if rand.Float64() < 0.5 {
-				return player, enemy, playerMoves[0], enemyMoves[0]
+				return player, enemy, playerMove, enemyMove
 			} else {
-				return enemy, player, enemyMoves[0], playerMoves[0]
+				return enemy, player, enemyMove, playerMove
 			}
 		} else if playerSpeed > enemySpeed {
-			return player, enemy, playerMoves[0], enemyMoves[0]
+			return player, enemy, playerMove, enemyMove
 		} else {
-			return enemy, player, enemyMoves[0], playerMoves[0]
+			return enemy, player, enemyMove, playerMove
 		}
 	}
 
 	if playerPriority > enemyPriority {
-		return player, enemy, playerMoves[0], enemyMoves[0]
+		return player, enemy, playerMove, enemyMove
 	} else {
-		return enemy, player, enemyMoves[0], playerMoves[0]
+		return enemy, player, enemyMove, playerMove
 	}
 }
 
-func isSwitching(moves []*pokemon.MoveInfo) bool {
-	for _, move := range moves {
-		if move.Name == "Switch" {
-			return true
-		}
-	}
-	return false
+func isSwitching(move *pokemon.MoveInfo) bool {
+	return move != nil && move.Name == "Switch"
 }
 
-func getMovePriority(pokemon *BattlePokemon, moves []*pokemon.MoveInfo) int {
-	highestPriority := 0
-	for _, move := range moves {
-		if move.Priority > highestPriority {
-			highestPriority = move.Priority
-		}
+func getMovePriority(move *pokemon.MoveInfo) int {
+	if move != nil {
+		return move.Priority
 	}
-	return highestPriority
+	return 0
 }
 
 func (bp *BattlePokemon) HandleTurnEffects() {

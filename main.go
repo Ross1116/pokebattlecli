@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"time"
 
 	"github.com/ross1116/pokebattlecli/internal/battle"
@@ -78,22 +78,32 @@ func main() {
 			continue
 		}
 
-		moveData := playerMovesets[playerActiveIndex][choice-1]
+		playerMoveData := playerMovesets[playerActiveIndex][choice-1]
+		enemyMoveData := enemyMovesets[enemyActiveIndex][rand.IntN(len(enemyMovesets[enemyActiveIndex]))]
 
-		if playerSquad[playerActiveIndex].MovePP[moveData.Name] == 0 {
+		if playerSquad[playerActiveIndex].MovePP[playerMoveData.Name] == 0 {
 			fmt.Println("This move has no PP left.")
 			continue
 		}
 
-		if !playerSquad[playerActiveIndex].UseMove(moveData.Name) {
+		if !playerSquad[playerActiveIndex].UseMove(playerMoveData.Name) {
 			fmt.Println("Move failed.")
 			continue
 		}
+		if enemySquad[enemyActiveIndex].MovePP[enemyMoveData.Name] == 0 {
+			fmt.Println("Enemy tried to use", enemyMoveData.Name, "but it has no PP!")
+			continue
+		}
 
-		fmt.Printf("\nYou used %s!\n", moveData.Name)
+		// Execute full turn
+		battle.ExecuteBattleTurn(
+			playerSquad[playerActiveIndex],
+			enemySquad[enemyActiveIndex],
+			playerMoveData,
+			enemyMoveData,
+		)
 
-		battle.ProcessPlayerTurn(playerSquad[playerActiveIndex], enemySquad[enemyActiveIndex], moveData)
-
+		// Check for fainted Pokémon
 		if enemySquad[enemyActiveIndex].Fainted {
 			newEnemyIndex := battle.NextAvailablePokemon(enemyPokemonSquad, enemyActiveIndex)
 			if newEnemyIndex == -1 {
@@ -103,18 +113,6 @@ func main() {
 			enemyActiveIndex = newEnemyIndex
 			fmt.Printf("Enemy sent out %s!\n", enemySquad[enemyActiveIndex].Base.Name)
 			continue
-		}
-
-		if rand.Float64() < 0.2 {
-			newEnemyIndex := battle.NextAvailablePokemon(enemyPokemonSquad, enemyActiveIndex)
-			if newEnemyIndex != -1 {
-				enemyActiveIndex = newEnemyIndex
-				enemyBattlePokemon := enemySquad[enemyActiveIndex]
-				fmt.Printf("Enemy switched to %s!\n", enemyBattlePokemon.Base.Name)
-			}
-		} else {
-			moveDataEnemy := enemyMovesets[enemyActiveIndex][rand.Intn(len(enemyMovesets[enemyActiveIndex]))]
-			battle.ProcessEnemyTurn(playerSquad[playerActiveIndex], enemySquad[enemyActiveIndex], moveDataEnemy)
 		}
 
 		if playerSquad[playerActiveIndex].Fainted {

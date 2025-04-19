@@ -94,6 +94,11 @@ func FetchMoveData(url string) (*MoveInfo, error) {
 	return &move, nil
 }
 
+func FetchMoveByName(name string) (*MoveInfo, error) {
+	url := fmt.Sprintf("https://pokeapi.co/api/v2/move/%s/", name)
+	return FetchMoveData(url)
+}
+
 // Helper function to fetch moves concurrently
 // This doesn't change the original functions but can be used with them
 func fetchMovesInParallel(moveURLs []string) ([]*MoveInfo, error) {

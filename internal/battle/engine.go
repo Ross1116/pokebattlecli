@@ -76,8 +76,8 @@ func DamageCalc(attacker *pokemon.Pokemon, defender *pokemon.Pokemon, move *poke
 		finalDmg *= 1.5
 	}
 
-	fmt.Printf("\nDEBUG: Atk:%d | Def: %d | Power: %d | BaseDmg: %.2f | STAB: %.2f | TypeEff: %.2f | Random: %.2f | Crit: %v | FinalDmg: %.2f\n",
-		atkStat, defStat, move.Power, baseDmg, stab, effectiveness, randomFactor, wasCrit, finalDmg)
+	fmt.Printf("\nDEBUG: Atk:%d | Def: %d | Power: %d | Speed: %d | Priority: %d | BaseDmg: %.2f | STAB: %.2f | TypeEff: %.2f | Random: %.2f | Crit: %v | FinalDmg: %.2f\n",
+		atkStat, defStat, move.Power, int(stats.StatCalc(stats.GetStat(attacker, "speed"))), move.Priority, baseDmg, stab, effectiveness, randomFactor, wasCrit, finalDmg)
 
 	rounded := int(math.Floor(finalDmg))
 	baseHp := stats.GetStat(defender, "hp")
@@ -85,4 +85,25 @@ func DamageCalc(attacker *pokemon.Pokemon, defender *pokemon.Pokemon, move *poke
 	percent := (finalDmg / totalHp) * 100
 
 	return rounded, percent
+}
+
+func ExecuteBattleTurn(player *BattlePokemon, enemy *BattlePokemon, playerMove *pokemon.MoveInfo, enemyMove *pokemon.MoveInfo) {
+	first, second, firstMove, secondMove := ResolveTurn(player, enemy, playerMove, enemyMove)
+
+	first.HandleTurnEffects()
+	second.HandleTurnEffects()
+
+	if first == player {
+		ProcessPlayerTurn(player, enemy, firstMove)
+		if enemy.Fainted {
+			return
+		}
+		ProcessEnemyTurn(player, enemy, secondMove)
+	} else {
+		ProcessEnemyTurn(player, enemy, firstMove)
+		if player.Fainted {
+			return
+		}
+		ProcessPlayerTurn(player, enemy, secondMove)
+	}
 }
