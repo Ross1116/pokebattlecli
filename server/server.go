@@ -7,33 +7,6 @@ import (
 	"net"
 )
 
-type Server struct {
-	host    string
-	port    string
-	clients map[string]*Client
-	lobbies map[string]*Lobby
-}
-
-type Client struct {
-	conn     net.Conn
-	username string
-}
-
-type Lobby struct {
-	player1 *Client
-	player2 *Client
-}
-
-type Config struct {
-	Host string
-	Port string
-}
-
-type Response struct {
-	Type    string                 `json:"type"`
-	Message map[string]interface{} `json:"message"`
-}
-
 func New(config *Config) *Server {
 	return &Server{
 		host:    config.Host,
@@ -85,7 +58,6 @@ func (server *Server) SendResponse(conn net.Conn, response Response) {
 func (server *Server) handleClient(conn net.Conn) {
 	defer conn.Close()
 
-	// Read incoming request from the client
 	buf := make([]byte, 1024)
 	n, err := conn.Read(buf)
 	if err != nil {
@@ -99,7 +71,6 @@ func (server *Server) handleClient(conn net.Conn) {
 		return
 	}
 
-	// Handle the request type
 	switch msg["type"] {
 	case "register":
 		server.handleRegistration(msg, conn)
