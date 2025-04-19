@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// Shared HTTP client for connection pooling
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 	Transport: &http.Transport{
@@ -19,16 +18,13 @@ var httpClient = &http.Client{
 	},
 }
 
-// Cache implementation
 var (
 	cache     = make(map[string][]byte)
 	cacheLock = sync.RWMutex{}
 	cacheTTL  = make(map[string]time.Time)
 )
 
-// Original function signature maintained
 func FetchData[T any](url string, result *T) error {
-	// Check cache first
 	cacheLock.RLock()
 	cachedData, exists := cache[url]
 	expiryTime, timeExists := cacheTTL[url]
@@ -39,7 +35,6 @@ func FetchData[T any](url string, result *T) error {
 		return json.Unmarshal(cachedData, result)
 	}
 
-	// Cache miss, fetch from network using shared client
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return err
@@ -60,15 +55,12 @@ func FetchData[T any](url string, result *T) error {
 	return json.Unmarshal(body, result)
 }
 
-// Original function signature maintained
 func FetchPokemonData(identifier any) (*Pokemon, error) {
 	var url string
 	switch v := identifier.(type) {
 	case string:
-		// Fetch by name
 		url = fmt.Sprintf("http://pokeapi.co/api/v2/pokemon/%s/", v)
 	case int:
-		// Fetch by ID
 		url = fmt.Sprintf("http://pokeapi.co/api/v2/pokemon/%d/", v)
 	default:
 		return nil, fmt.Errorf("invalid identifier type")
@@ -83,7 +75,6 @@ func FetchPokemonData(identifier any) (*Pokemon, error) {
 	return &pokemon, nil
 }
 
-// Original function signature maintained
 func FetchMoveData(url string) (*MoveInfo, error) {
 	var move MoveInfo
 	err := FetchData(url, &move)
@@ -100,8 +91,7 @@ func FetchMoveByName(name string) (*MoveInfo, error) {
 }
 
 // Helper function to fetch moves concurrently
-// This doesn't change the original functions but can be used with them
-func fetchMovesInParallel(moveURLs []string) ([]*MoveInfo, error) {
+func FetchMovesInParallel(moveURLs []string) ([]*MoveInfo, error) {
 	moves := make([]*MoveInfo, len(moveURLs))
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(moveURLs))
@@ -115,7 +105,6 @@ func fetchMovesInParallel(moveURLs []string) ([]*MoveInfo, error) {
 		go func(idx int, moveURL string) {
 			defer wg.Done()
 
-			// Acquire semaphore slot
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
@@ -134,7 +123,6 @@ func fetchMovesInParallel(moveURLs []string) ([]*MoveInfo, error) {
 	wg.Wait()
 	close(errChan)
 
-	// Check for errors
 	select {
 	case err := <-errChan:
 		return nil, err
