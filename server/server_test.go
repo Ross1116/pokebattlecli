@@ -361,14 +361,6 @@ func TestPlayerAlreadyInMatch(t *testing.T) {
 	<-conn2.writeData
 	<-conn3.writeData
 
-	// First, let's modify the server code to make this test possible
-	// We need to modify IsInLobby in handlers.go to check by username:
-	//
-	// func (server *Server) IsInLobby(client *Client) bool {
-	//     _, exists := server.Lobbies[client.Username]
-	//     return exists
-	// }
-
 	// Manually set up a lobby by adding entries to the Lobbies map
 	fakelobby := &server.Lobby{}
 	s.Lobbies["player1"] = fakelobby
@@ -390,3 +382,4 @@ func TestPlayerAlreadyInMatch(t *testing.T) {
 		// This is the expected behavior
 	}
 }
+
