@@ -42,7 +42,8 @@ func (c *Client) Register() error {
 
 func (c *Client) GetPlayers() error {
 	req := map[string]string{
-		"type": "get_players",
+		"type":     "get_players",
+		"username": c.Config.Username,
 	}
 	return c.SendRequest(req)
 }

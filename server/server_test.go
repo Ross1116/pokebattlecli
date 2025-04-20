@@ -145,12 +145,17 @@ func TestHandleGetPlayers(t *testing.T) {
 	<-conn1.writeData
 	<-conn2.writeData
 
-	// Test get players
-	conn := newMockConn()
-	go s.HandleGetPlayers(conn)
+	// Test get players with username in request (as if from player1)
+	getPlayersMsg := map[string]string{
+		"type":     "get_players",
+		"username": "player1",
+	}
+
+	// Use conn1 since this is player1's request
+	go s.HandleGetPlayers(getPlayersMsg, conn1)
 
 	select {
-	case response := <-conn.writeData:
+	case response := <-conn1.writeData:
 		var resp server.Response
 		if err := json.Unmarshal(response, &resp); err != nil {
 			t.Fatalf("Failed to unmarshal response: %v", err)
@@ -174,9 +179,33 @@ func TestHandleGetPlayers(t *testing.T) {
 			t.Errorf("Expected 2 players, got %d", len(players))
 		}
 
+		// Verify both players are in the list
+		playerNames := make([]string, len(players))
+		for i, p := range players {
+			playerName, ok := p.(string)
+			if !ok {
+				t.Fatalf("Expected player name to be string, got %T", p)
+			}
+			playerNames[i] = playerName
+		}
+
+		if !containsString(playerNames, "player1") || !containsString(playerNames, "player2") {
+			t.Errorf("Player list should contain both player1 and player2, got %v", playerNames)
+		}
+
 	case <-time.After(time.Second):
 		t.Fatal("Timeout waiting for player list response")
 	}
+}
+
+// Helper function to check if a string slice contains a specific string
+func containsString(slice []string, str string) bool {
+	for _, s := range slice {
+		if s == str {
+			return true
+		}
+	}
+	return false
 }
 
 func TestHandleMatchmake(t *testing.T) {
@@ -382,4 +411,3 @@ func TestPlayerAlreadyInMatch(t *testing.T) {
 		// This is the expected behavior
 	}
 }
-

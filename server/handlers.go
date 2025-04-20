@@ -45,11 +45,21 @@ func (server *Server) HandleRegistration(msg map[string]string, conn net.Conn) {
 	})
 }
 
-func (server *Server) HandleGetPlayers(conn net.Conn) {
+func (server *Server) HandleGetPlayers(msg map[string]string, conn net.Conn) {
+	requestingUsername := msg["username"]
+	log.Printf("Get players request from: %s", requestingUsername)
+
 	var players []string
-	for username := range server.clients {
-		players = append(players, username)
+	log.Printf("Total clients in map: %d", len(server.clients))
+
+	for username, client := range server.clients {
+		log.Printf("Checking client: %s, conn nil: %v", username, client.Conn == nil)
+		if client.Conn != nil {
+			players = append(players, username)
+		}
 	}
+
+	log.Printf("Returning player list with %d players: %v", len(players), players)
 
 	response := Response{
 		Type: "player_list",
@@ -65,24 +75,54 @@ func (server *Server) HandleMatchmake(msg map[string]string, conn net.Conn) {
 	username := msg["username"]
 	opponent := msg["opponent"]
 
+	if username == opponent {
+		server.SendResponse(conn, Response{
+			Type:    "match_error",
+			Message: map[string]interface{}{"error": "Cannot match with yourself"},
+		})
+		return
+	}
+
 	player, exists := server.clients[username]
 	if !exists {
 		log.Printf("Player %s not found", username)
 		return
 	}
+
 	opponentClient, exists := server.clients[opponent]
 	if !exists {
 		log.Printf("Opponent %s not found", opponent)
+		server.SendResponse(conn, Response{
+			Type:    "match_error",
+			Message: map[string]interface{}{"error": "Opponent not found"},
+		})
 		return
 	}
 
 	if server.IsInLobby(player) {
 		log.Printf("Player %s is already in a match", username)
+		server.SendResponse(conn, Response{
+			Type:    "match_error",
+			Message: map[string]interface{}{"error": "You are already in a match"},
+		})
 		return
 	}
 
 	if server.IsInLobby(opponentClient) {
 		log.Printf("Opponent %s is already in a match", opponent)
+		server.SendResponse(conn, Response{
+			Type:    "match_error",
+			Message: map[string]interface{}{"error": "Opponent is already in a match"},
+		})
+		return
+	}
+
+	if opponentClient.Conn == nil {
+		log.Printf("Opponent %s has disconnected", opponent)
+		server.SendResponse(conn, Response{
+			Type:    "match_error",
+			Message: map[string]interface{}{"error": "Opponent has disconnected"},
+		})
 		return
 	}
 
@@ -113,13 +153,31 @@ func (server *Server) HandleDisconnection(conn net.Conn) {
 		if client.Conn == conn {
 			log.Printf("Player %s disconnected", username)
 
-			delete(server.clients, username)
-
-			for key, lobby := range server.Lobbies {
-				if lobby.player1.Username == username || lobby.player2.Username == username {
-					delete(server.Lobbies, key)
+			if lobby, inLobby := server.Lobbies[username]; inLobby {
+				var opponentUsername string
+				if lobby.player1.Username == username {
+					opponentUsername = lobby.player2.Username
+				} else {
+					opponentUsername = lobby.player1.Username
 				}
+
+				if opponent, exists := server.clients[opponentUsername]; exists && opponent.Conn != nil {
+					server.SendResponse(opponent.Conn, Response{
+						Type: "opponent_disconnected",
+						Message: map[string]interface{}{
+							"opponent": username,
+						},
+					})
+				}
+
+				delete(server.Lobbies, username)
+				delete(server.Lobbies, opponentUsername)
+
+				log.Printf("Removed match between %s and %s due to disconnection",
+					username, opponentUsername)
 			}
+
+			client.Conn = nil
 			return
 		}
 	}

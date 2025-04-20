@@ -52,8 +52,14 @@ func (server *Server) SendResponse(conn net.Conn, response Response) {
 }
 
 func (server *Server) HandleClient(conn net.Conn) {
-	defer conn.Close()
-	defer server.HandleDisconnection(conn)
+	var isReconnect bool
+
+	defer func() {
+		if !isReconnect {
+			server.HandleDisconnection(conn)
+		}
+		conn.Close()
+	}()
 
 	buf := make([]byte, 1024)
 
@@ -72,9 +78,12 @@ func (server *Server) HandleClient(conn net.Conn) {
 
 		switch msg["type"] {
 		case "register":
+			if existingClient, ok := server.clients[msg["username"]]; ok && existingClient.Conn != nil {
+				isReconnect = true
+			}
 			server.HandleRegistration(msg, conn)
 		case "get_players":
-			server.HandleGetPlayers(conn)
+			server.HandleGetPlayers(msg, conn)
 		case "matchmake":
 			server.HandleMatchmake(msg, conn)
 		default:
@@ -82,4 +91,3 @@ func (server *Server) HandleClient(conn net.Conn) {
 		}
 	}
 }
-
