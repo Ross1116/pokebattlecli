@@ -12,9 +12,10 @@ import (
 
 func New(config *Config) *Client {
 	return &Client{
-		Config:      config,
-		Connected:   false,
-		MessageChan: make(chan Message, 10),
+		Config:           config,
+		Connected:        false,
+		MessageChan:      make(chan Message, 10),
+		GameInputChannel: make(chan string, 5),
 	}
 }
 
@@ -111,6 +112,8 @@ func (c *Client) ProcessMessage(msg Message) {
 		c.processPlayerList(msg)
 	case "match_start":
 		c.processMatchStart(msg)
+	case "game_start":
+		c.processGameStart(msg)
 	case "game_end":
 		c.processGameEnd(msg)
 	default:

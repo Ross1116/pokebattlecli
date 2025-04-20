@@ -3,6 +3,9 @@ package client
 import (
 	"encoding/json"
 	"net"
+
+	"github.com/ross1116/pokebattlecli/internal/battle"
+	"github.com/ross1116/pokebattlecli/internal/pokemon"
 )
 
 type Config struct {
@@ -18,6 +21,18 @@ type Client struct {
 	Opponent    string
 	InMatch     bool
 	MessageChan chan Message
+
+	// Game state
+	GameActive       bool
+	GameInputChannel chan string
+	PlayerSquad      []*battle.BattlePokemon
+	EnemySquad       []*battle.BattlePokemon
+	PlayerMovesets   [][]pokemon.MoveInfo
+	EnemyMovesets    [][]pokemon.MoveInfo
+	PlayerActiveIdx  int
+	EnemyActiveIdx   int
+	PlayerMaxHPs     []float64
+	EnemyMaxHPs      []float64
 }
 
 type Message struct {
@@ -28,4 +43,3 @@ type Message struct {
 func Marshal(data map[string]string) ([]byte, error) {
 	return json.Marshal(data)
 }
-

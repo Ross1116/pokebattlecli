@@ -50,6 +50,63 @@ func (c *Client) processMatchStart(msg Message) {
 	fmt.Printf("Match started with %s!\n", opponent)
 }
 
+func (c *Client) processGameStart(msg Message) {
+	yourSquadInterface, ok := msg.Message["your_squad"]
+	if !ok {
+		log.Println("No your_squad field in game_start message")
+		return
+	}
+
+	opponentSquadInterface, ok := msg.Message["opponent_squad"]
+	if !ok {
+		log.Println("No opponent_squad field in game_start message")
+		return
+	}
+
+	yourSquadRaw, ok := yourSquadInterface.([]interface{})
+	if !ok {
+		log.Printf("Invalid your_squad format: %T", yourSquadInterface)
+		return
+	}
+
+	opponentSquadRaw, ok := opponentSquadInterface.([]interface{})
+	if !ok {
+		log.Printf("Invalid opponent_squad format: %T", opponentSquadInterface)
+		return
+	}
+
+	yourSquad := make([]string, len(yourSquadRaw))
+	for i, v := range yourSquadRaw {
+		yourSquad[i], ok = v.(string)
+		if !ok {
+			log.Printf("Non-string pokemon in your_squad: %T", v)
+			return
+		}
+	}
+
+	opponentSquad := make([]string, len(opponentSquadRaw))
+	for i, v := range opponentSquadRaw {
+		opponentSquad[i], ok = v.(string)
+		if !ok {
+			log.Printf("Non-string pokemon in opponent_squad: %T", v)
+			return
+		}
+	}
+
+	c.InMatch = true
+
+	fmt.Printf("Match started against %s!\n", c.Opponent)
+	fmt.Println("\nYour squad:")
+	for _, pokemon := range yourSquad {
+		fmt.Printf("- %s\n", pokemon)
+	}
+
+	fmt.Println("\nOpponent's squad:")
+	for _, pokemon := range opponentSquad {
+		fmt.Printf("- %s\n", pokemon)
+	}
+}
+
 func (c *Client) processGameEnd(msg Message) {
 	resultInterface, ok := msg.Message["result"]
 	if !ok {

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+
+	"github.com/ross1116/pokebattlecli/internal/pokemon"
 )
 
 func (server *Server) HandleRegistration(msg map[string]string, conn net.Conn) {
@@ -205,17 +207,32 @@ func (server *Server) IsInLobby(client *Client) bool {
 func (server *Server) startGame(lobby *Lobby) {
 	log.Println("Game started between", lobby.player1.Username, "and", lobby.player2.Username)
 
+	squad1 := pokemon.SelectRandSquad()
+	squad2 := pokemon.SelectRandSquad()
+
+	squad1Names := []string{}
+	for _, poke := range squad1 {
+		squad1Names = append(squad1Names, poke.Name)
+	}
+
+	squad2Names := []string{}
+	for _, poke := range squad2 {
+		squad2Names = append(squad2Names, poke.Name)
+	}
+
 	server.SendResponse(lobby.player1.Conn, Response{
-		Type: "game_end",
+		Type: "game_start",
 		Message: map[string]interface{}{
-			"result": "win",
+			"your_squad":     squad1Names,
+			"opponent_squad": squad2Names,
 		},
 	})
 
 	server.SendResponse(lobby.player2.Conn, Response{
-		Type: "game_end",
+		Type: "game_start",
 		Message: map[string]interface{}{
-			"result": "lose",
+			"your_squad":     squad2Names,
+			"opponent_squad": squad1Names,
 		},
 	})
 
