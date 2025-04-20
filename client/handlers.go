@@ -105,6 +105,72 @@ func (c *Client) processGameStart(msg Message) {
 	for _, pokemon := range opponentSquad {
 		fmt.Printf("- %s\n", pokemon)
 	}
+
+	var yourPokemon, opponentPokemon string
+	var yourMoveset []string
+
+	if pokemonInterface, ok := msg.Message["your_pokemon"]; ok {
+		yourPokemon, ok = pokemonInterface.(string)
+		if !ok {
+			log.Printf("Invalid your_pokemon format: %T", pokemonInterface)
+			return
+		}
+	}
+
+	if pokemonInterface, ok := msg.Message["opponent_pokemon"]; ok {
+		opponentPokemon, ok = pokemonInterface.(string)
+		if !ok {
+			log.Printf("Invalid opponent_pokemon format: %T", pokemonInterface)
+			return
+		}
+	}
+	if movesInterface, ok := msg.Message["your_moves"]; ok {
+		movesRaw, ok := movesInterface.([]interface{})
+		if !ok {
+			log.Printf("Invalid your_moves format: %T", movesInterface)
+			return
+		}
+
+		yourMoveset = make([]string, len(movesRaw))
+		for i, v := range movesRaw {
+			yourMoveset[i], ok = v.(string)
+			if !ok {
+				log.Printf("Non-string move in your_moves: %T", v)
+				return
+			}
+		}
+	}
+
+	if yourMoveset == nil {
+		if movesInterface, ok := msg.Message["opponent_moves"]; ok {
+			movesRaw, ok := movesInterface.([]interface{})
+			if !ok {
+				log.Printf("Invalid opponent_moves format: %T", movesInterface)
+				return
+			}
+
+			yourMoveset = make([]string, len(movesRaw))
+			for i, v := range movesRaw {
+				yourMoveset[i], ok = v.(string)
+				if !ok {
+					log.Printf("Non-string move in opponent_moves: %T", v)
+					return
+				}
+			}
+		}
+	}
+
+	fmt.Println("\n=================BATTLE START===================")
+	fmt.Printf("\n%s vs %s\n", yourPokemon, opponentPokemon)
+	fmt.Println("\nAvailable Moves:")
+
+	for i, move := range yourMoveset {
+		fmt.Printf("%d. %s\n", i+1, move)
+	}
+	fmt.Println("0. Switch Pokemon\n")
+
+	fmt.Print("Select your action (0 - 5):")
+
 }
 
 func (c *Client) processGameEnd(msg Message) {

@@ -5,7 +5,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/ross1116/pokebattlecli/internal/pokemon"
+	"github.com/ross1116/pokebattlecli/internal/battle"
 )
 
 func (server *Server) HandleRegistration(msg map[string]string, conn net.Conn) {
@@ -207,32 +207,47 @@ func (server *Server) IsInLobby(client *Client) bool {
 func (server *Server) startGame(lobby *Lobby) {
 	log.Println("Game started between", lobby.player1.Username, "and", lobby.player2.Username)
 
-	squad1 := pokemon.SelectRandSquad()
-	squad2 := pokemon.SelectRandSquad()
+	squad1, squad2, moveset1, moveset2, idx1, idx2 := battle.SetupMPSquad()
 
 	squad1Names := []string{}
 	for _, poke := range squad1 {
-		squad1Names = append(squad1Names, poke.Name)
+		squad1Names = append(squad1Names, poke.Base.Name)
 	}
 
 	squad2Names := []string{}
 	for _, poke := range squad2 {
-		squad2Names = append(squad2Names, poke.Name)
+		squad2Names = append(squad2Names, poke.Base.Name)
+	}
+
+	moveNames1 := make([]string, len(moveset1[idx1]))
+	for i, move := range moveset1[idx1] {
+		moveNames1[i] = move.Name
+	}
+
+	moveNames2 := make([]string, len(moveset2[idx2]))
+	for i, move := range moveset2[idx2] {
+		moveNames2[i] = move.Name
 	}
 
 	server.SendResponse(lobby.player1.Conn, Response{
 		Type: "game_start",
 		Message: map[string]interface{}{
-			"your_squad":     squad1Names,
-			"opponent_squad": squad2Names,
+			"your_squad":       squad1Names,
+			"opponent_squad":   squad2Names,
+			"your_pokemon":     squad1Names[idx1],
+			"opponent_pokemon": squad2Names[idx2],
+			"your_moves":       moveNames1,
 		},
 	})
 
 	server.SendResponse(lobby.player2.Conn, Response{
 		Type: "game_start",
 		Message: map[string]interface{}{
-			"your_squad":     squad2Names,
-			"opponent_squad": squad1Names,
+			"your_squad":       squad2Names,
+			"opponent_squad":   squad1Names,
+			"your_pokemon":     squad2Names[idx2],
+			"opponent_pokemon": squad1Names[idx1],
+			"your_moves":       moveNames2,
 		},
 	})
 
