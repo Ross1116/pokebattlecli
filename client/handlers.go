@@ -3,6 +3,11 @@ package client
 import (
 	"fmt"
 	"log"
+	"sync"
+	"time"
+
+	"github.com/ross1116/pokebattlecli/internal/battle"
+	"github.com/ross1116/pokebattlecli/internal/pokemon"
 )
 
 func (c *Client) processPlayerList(msg Message) {
@@ -154,15 +159,138 @@ func (c *Client) processGameUpdate(msg Message) {
 }
 
 // Add this method to set up the battle state
-func (c *Client) setupBattleState(yourSquad, opponentSquad []string) {
-	// This would initialize your battle state with the squads received from the server
-	// For now, this is a stub - you would need to implement this with your battle system
-	fmt.Println("\nSetting up battle with received squads...")
+func (c *Client) setupBattleState(yourSquadNames, opponentSquadNames []string) {
+	log.Println("Setting up client battle state by fetching data...")
+	startTime := time.Now()
 
-	// You would replace this with actual initialization from your battle system:
-	// c.PlayerSquad, c.EnemySquad, c.PlayerMovesets, c.EnemyMovesets, c.PlayerActiveIdx, c.EnemyActiveIdx =
-	//     battle.SetupSpecificSquads(yourSquad, opponentSquad)
+	moveCache := make(map[string]*pokemon.MoveInfo)
+	var cacheMutex sync.Mutex
+	fetchMoveWithCache := func(url string) (*pokemon.MoveInfo, error) {
+		cacheMutex.Lock()
+		if cachedMove, found := moveCache[url]; found {
+			cacheMutex.Unlock()
+			return cachedMove, nil
+		}
+		cacheMutex.Unlock()
 
-	// This should also initialize:
-	// c.PlayerMaxHPs and c.EnemyMaxHPs
+		var moveData *pokemon.MoveInfo
+		var err error
+		maxRetries := 3
+
+		for attempts := 0; attempts < maxRetries; attempts++ {
+			moveData, err = pokemon.FetchMoveData(url)
+			if err == nil {
+				cacheMutex.Lock()
+				moveCache[url] = moveData
+				cacheMutex.Unlock()
+				return moveData, nil
+			}
+			log.Printf("Attempt %d: Error fetching move %s: %v. Retrying...", attempts+1, url, err)
+			time.Sleep(time.Duration(100*(attempts+1)) * time.Millisecond)
+		}
+		return nil, fmt.Errorf("failed to fetch move %s after %d retries: %w", url, maxRetries, err)
+	}
+
+	var wg sync.WaitGroup
+	var setupMutex sync.Mutex
+
+	playerSquadSize := len(yourSquadNames)
+	enemySquadSize := len(opponentSquadNames)
+	c.PlayerSquad = make([]*battle.BattlePokemon, playerSquadSize)
+	c.EnemySquad = make([]*battle.BattlePokemon, enemySquadSize)
+
+	processPokemon := func(idx int, pokeName string, isPlayer bool) {
+		defer wg.Done()
+		log.Printf("Initializing %s (%s)...", pokeName, map[bool]string{true: "Player", false: "Opponent"}[isPlayer])
+
+		basePoke, err := pokemon.FetchPokemonData(pokeName)
+		if err != nil {
+			log.Printf("Error fetching base data for %s: %v", pokeName, err)
+			return
+		}
+		if basePoke == nil {
+			log.Printf("Error: Fetched nil base data for %s", pokeName)
+			return
+		}
+
+		moveEntries := pokemon.PickRandMoves(basePoke)
+
+		moveset := []*pokemon.MoveInfo{}
+		var moveWg sync.WaitGroup
+		var movesetMutex sync.Mutex
+		for _, entry := range moveEntries {
+			moveWg.Add(1)
+			go func(mEntry pokemon.ApiResource) {
+				defer moveWg.Done()
+				moveData, err := fetchMoveWithCache(mEntry.URL)
+				if err != nil {
+					log.Printf("Error fetching move details %s for %s: %v", mEntry.Name, pokeName, err)
+					return
+				}
+				if moveData != nil {
+					movesetMutex.Lock()
+					moveset = append(moveset, moveData)
+					movesetMutex.Unlock()
+				}
+			}(entry)
+		}
+		moveWg.Wait()
+
+		battlePoke := battle.NewBattlePokemon(basePoke, moveset)
+		if battlePoke == nil {
+			log.Printf("Error creating BattlePokemon for %s", pokeName)
+			return
+		}
+
+		setupMutex.Lock()
+		if isPlayer {
+			if idx < len(c.PlayerSquad) {
+				c.PlayerSquad[idx] = battlePoke
+			}
+		} else {
+			if idx < len(c.EnemySquad) {
+				c.EnemySquad[idx] = battlePoke
+			}
+		}
+		setupMutex.Unlock()
+		log.Printf("Initialized %s", pokeName)
+	}
+
+	log.Println("Initializing Player Squad...")
+	for i, name := range yourSquadNames {
+		wg.Add(1)
+		go processPokemon(i, name, true)
+	}
+
+	log.Println("Initializing Opponent Squad...")
+	for i, name := range opponentSquadNames {
+		wg.Add(1)
+		go processPokemon(i, name, false)
+	}
+
+	wg.Wait()
+
+	c.PlayerActiveIdx = 0
+	c.EnemyActiveIdx = 0
+
+	squadPopulated := true
+	for i := range c.PlayerSquad {
+		if c.PlayerSquad[i] == nil {
+			squadPopulated = false
+			log.Printf("Error: Player squad member at index %d failed to initialize.", i)
+		}
+	}
+	for i := range c.EnemySquad {
+		if c.EnemySquad[i] == nil {
+			squadPopulated = false
+			log.Printf("Error: Opponent squad member at index %d failed to initialize.", i)
+		}
+	}
+
+	if !squadPopulated {
+		log.Println("Error: Failed to initialize one or more Pokemon in the squads.")
+	}
+
+	log.Printf("Client battle state setup complete. Time: %s", time.Since(startTime))
+	fmt.Println("\nBattle state ready!")
 }

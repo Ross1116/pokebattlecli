@@ -3,13 +3,53 @@ package server
 import (
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ross1116/pokebattlecli/internal/battle"
 	"github.com/ross1116/pokebattlecli/internal/pokemon"
+	"github.com/ross1116/pokebattlecli/internal/stats"
 )
+
+type PokemonStateInfo struct {
+	SquadIndex int     `json:"squad_index"`
+	Name       string  `json:"name"`
+	CurrentHP  float64 `json:"current_hp"`
+	MaxHP      float64 `json:"max_hp"`
+	HPPercent  float64 `json:"hp_percent"`
+	Fainted    bool    `json:"fainted"`
+	Status     string  `json:"status"`
+}
+
+func getSquadStateInfo(squad []*battle.BattlePokemon) []PokemonStateInfo {
+	if squad == nil {
+		return nil
+	}
+	info := make([]PokemonStateInfo, len(squad))
+	for i, p := range squad {
+		if p == nil || p.Base == nil {
+			info[i] = PokemonStateInfo{SquadIndex: i, Name: "(Error)"}
+			continue
+		}
+		maxHP := stats.HpCalc(stats.GetStat(p.Base, "hp"))
+		hpPercent := 0.0
+		if maxHP > 0 {
+			hpPercent = math.Max(0, math.Min(100, (p.CurrentHP/maxHP)*100.0))
+		}
+		info[i] = PokemonStateInfo{
+			SquadIndex: i,
+			Name:       p.Base.Name,
+			CurrentHP:  p.CurrentHP,
+			MaxHP:      maxHP,
+			HPPercent:  hpPercent,
+			Fainted:    p.Fainted,
+			Status:     p.Status,
+		}
+	}
+	return info
+}
 
 func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*battle.BattlePokemon, moveset1, moveset2 [][]*pokemon.MoveInfo) {
 	battleState := NewBattleState(player1.Username, player2.Username, squad1, squad2)
@@ -59,6 +99,51 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 		if !p1Connected || !p2Connected {
 			log.Printf("Player connection lost during game loop (%s:%v, %s:%v). Ending battle.", player1.Username, p1Connected, player2.Username, p2Connected)
 			return
+		}
+
+		if battleState.Player1ActiveIndex < 0 || battleState.Player1ActiveIndex >= len(battleState.Player1Team) ||
+			battleState.Player2ActiveIndex < 0 || battleState.Player2ActiveIndex >= len(battleState.Player2Team) {
+			log.Printf("Error: Invalid active Pokemon index before Turn %d. P1: %d, P2: %d", battleState.TurnNumber, battleState.Player1ActiveIndex, battleState.Player2ActiveIndex)
+			return
+		}
+		currentP1 := battleState.Player1Team[battleState.Player1ActiveIndex]
+		currentP2 := battleState.Player2Team[battleState.Player2ActiveIndex]
+		if currentP1 == nil || currentP2 == nil {
+			log.Printf("Error: Nil active Pokemon before Turn %d.", battleState.TurnNumber)
+			return
+		}
+
+		p1Lost := battle.IsAllFainted(battleState.Player1Team)
+		p2Lost := battle.IsAllFainted(battleState.Player2Team)
+		if p1Lost || p2Lost {
+			log.Printf("Game over between %s and %s. P1 Lost: %v, P2 Lost: %v", player1.Username, player2.Username, p1Lost, p2Lost)
+			winner, loser := player2, player1
+			result := "win"
+			if p1Lost && p2Lost {
+				result = "draw"
+			} else if p1Lost {
+				winner, loser = player2, player1
+				result = "win"
+			} else if p2Lost {
+				winner, loser = player1, player2
+				result = "win"
+			}
+			if winner.Conn != nil {
+				server.sendGameEnd(winner, loser, result)
+			}
+			if loser.Conn != nil {
+				server.sendGameEnd(loser, winner, mapResult(result))
+			}
+			return
+		}
+
+		if currentP1.Fainted {
+			log.Printf("Turn %d: Player 1's %s fainted, requesting switch.", battleState.TurnNumber, currentP1.Base.Name)
+			log.Println("TODO: Implement forced switch logic for Player 1")
+		}
+		if currentP2.Fainted {
+			log.Printf("Turn %d: Player 2's %s fainted, requesting switch.", battleState.TurnNumber, currentP2.Base.Name)
+			log.Println("TODO: Implement forced switch logic for Player 2")
 		}
 
 		p1Moves := extractMoveNames(moveset1[battleState.Player1ActiveIndex])
@@ -116,8 +201,9 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 		}
 
 		log.Printf("Turn %d: Processing actions for %s and %s", battleState.TurnNumber, player1.Username, player2.Username)
-		player1Pokemon := battleState.Player1Team[battleState.Player1ActiveIndex]
-		player2Pokemon := battleState.Player2Team[battleState.Player2ActiveIndex]
+		p1Acting := battleState.Player1Team[battleState.Player1ActiveIndex]
+		p2Acting := battleState.Player2Team[battleState.Player2ActiveIndex]
+
 		turnSummary := []string{}
 		var player1Move, player2Move *pokemon.MoveInfo
 
@@ -125,8 +211,8 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 			targetIdx := action1.SwitchToIndex
 			if targetIdx >= 0 && targetIdx < len(battleState.Player1Team) && !battleState.Player1Team[targetIdx].Fainted && targetIdx != battleState.Player1ActiveIndex {
 				battleState.Player1ActiveIndex = targetIdx
-				player1Pokemon = battleState.Player1Team[battleState.Player1ActiveIndex]
-				turnSummary = append(turnSummary, fmt.Sprintf("%s switched to %s!", player1.Username, player1Pokemon.Base.Name))
+				p1Acting = battleState.Player1Team[battleState.Player1ActiveIndex]
+				turnSummary = append(turnSummary, fmt.Sprintf("%s switched to %s!", player1.Username, p1Acting.Base.Name))
 				player1Move = nil
 			} else {
 				turnSummary = append(turnSummary, fmt.Sprintf("%s tried to switch but failed!", player1.Username))
@@ -143,8 +229,8 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 			targetIdx := action2.SwitchToIndex
 			if targetIdx >= 0 && targetIdx < len(battleState.Player2Team) && !battleState.Player2Team[targetIdx].Fainted && targetIdx != battleState.Player2ActiveIndex {
 				battleState.Player2ActiveIndex = targetIdx
-				player2Pokemon = battleState.Player2Team[battleState.Player2ActiveIndex]
-				turnSummary = append(turnSummary, fmt.Sprintf("%s switched to %s!", player2.Username, player2Pokemon.Base.Name))
+				p2Acting = battleState.Player2Team[battleState.Player2ActiveIndex]
+				turnSummary = append(turnSummary, fmt.Sprintf("%s switched to %s!", player2.Username, p2Acting.Base.Name))
 				player2Move = nil
 			} else {
 				turnSummary = append(turnSummary, fmt.Sprintf("%s tried to switch but failed!", player2.Username))
@@ -158,7 +244,7 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 		}
 
 		if player1Move != nil || player2Move != nil {
-			battleEvents := battle.ExecuteBattleTurn(player1Pokemon, player2Pokemon, player1Move, player2Move)
+			battleEvents := battle.ExecuteBattleTurn(p1Acting, p2Acting, player1Move, player2Move)
 			turnSummary = append(turnSummary, battleEvents...)
 		} else if action1.Type == "switch" && action2.Type == "switch" {
 			turnSummary = append(turnSummary, "Both players switched Pokemon!")
@@ -168,16 +254,64 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 
 		log.Printf("Turn %d: Sending results to %s and %s", battleState.TurnNumber, player1.Username, player2.Username)
 		battleState.LastTurnResults = turnSummary
-		resultMsg := map[string]interface{}{"description": turnSummary}
-		if player1.Conn != nil {
-			server.SendResponse(player1.Conn, Response{Type: "turn_result", Message: resultMsg})
+
+		p1HpPercent := 0.0
+		p2HpPercent := 0.0
+		finalP1 := battleState.Player1Team[battleState.Player1ActiveIndex]
+		finalP2 := battleState.Player2Team[battleState.Player2ActiveIndex]
+
+		if finalP1 != nil && finalP1.Base != nil {
+			p1MaxHp := stats.HpCalc(stats.GetStat(finalP1.Base, "hp"))
+			if p1MaxHp > 0 {
+				p1HpPercent = math.Max(0, math.Min(100, (finalP1.CurrentHP/p1MaxHp)*100.0))
+			}
 		}
-		if player2.Conn != nil {
-			server.SendResponse(player2.Conn, Response{Type: "turn_result", Message: resultMsg})
+		if finalP2 != nil && finalP2.Base != nil {
+			p2MaxHp := stats.HpCalc(stats.GetStat(finalP2.Base, "hp"))
+			if p2MaxHp > 0 {
+				p2HpPercent = math.Max(0, math.Min(100, (finalP2.CurrentHP/p2MaxHp)*100.0))
+			}
 		}
 
-		p1Lost := battle.IsAllFainted(battleState.Player1Team)
-		p2Lost := battle.IsAllFainted(battleState.Player2Team)
+		p1SquadState := getSquadStateInfo(battleState.Player1Team)
+		p2SquadState := getSquadStateInfo(battleState.Player2Team)
+		for _, info := range p1SquadState {
+			if info.SquadIndex == battleState.Player1ActiveIndex {
+				p1HpPercent = info.HPPercent
+				break
+			}
+		}
+		for _, info := range p2SquadState {
+			if info.SquadIndex == battleState.Player2ActiveIndex {
+				p2HpPercent = info.HPPercent
+				break
+			}
+		}
+
+		resultMsgP1 := map[string]interface{}{
+			"description":          turnSummary,
+			"your_hp_percent":      p1HpPercent,
+			"opponent_hp_percent":  p2HpPercent,
+			"your_squad_state":     p1SquadState,
+			"opponent_squad_state": p2SquadState,
+		}
+		resultMsgP2 := map[string]interface{}{
+			"description":          turnSummary,
+			"your_hp_percent":      p2HpPercent,
+			"opponent_hp_percent":  p1HpPercent,
+			"your_squad_state":     p2SquadState,
+			"opponent_squad_state": p1SquadState,
+		}
+
+		if player1.Conn != nil {
+			server.SendResponse(player1.Conn, Response{Type: "turn_result", Message: resultMsgP1})
+		}
+		if player2.Conn != nil {
+			server.SendResponse(player2.Conn, Response{Type: "turn_result", Message: resultMsgP2})
+		}
+
+		p1Lost = battle.IsAllFainted(battleState.Player1Team)
+		p2Lost = battle.IsAllFainted(battleState.Player2Team)
 		if p1Lost || p2Lost {
 			log.Printf("Game over between %s and %s. P1 Lost: %v, P2 Lost: %v", player1.Username, player2.Username, p1Lost, p2Lost)
 			winner, loser := player2, player1
@@ -186,6 +320,9 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 				result = "draw"
 			} else if p1Lost {
 				winner, loser = player2, player1
+				result = "win"
+			} else if p2Lost {
+				winner, loser = player1, player2
 				result = "win"
 			}
 			if winner.Conn != nil {
@@ -200,7 +337,6 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 		battleState.TurnNumber++
 	}
 }
-
 func (server *Server) sendGameEnd(playerToSendTo, opponent *Client, result string) {
 	if playerToSendTo == nil || playerToSendTo.Conn == nil {
 		return
