@@ -36,15 +36,39 @@ This project allows users to connect to a central server, find other players, an
 **Build:**
 (Optional) You can build the executables:
 ```bash
-go build -o server_app ./cmd/server/
-go build -o client_app ./cmd/client/
-Running the Server:Navigate to the project root directory.Run the server using go run or the compiled binary:go run ./cmd/server/
-# or ./server_app
-The server will log that it has started, usually on localhost:1234 (or configured host/port).Running the Client:Open a new terminal window.Navigate to the project root directory.Run the client using go run or the compiled binary, providing a unique username:go run ./cmd/client/ -user <your_username>
-# Example: go run ./cmd/client/ -user Ash
-# or ./client_app -user Ash
-Repeat step 3 in another terminal for a second player with a different username.
+   go build -o server_app ./cmd/server/
+   go build -o client_app ./cmd/client/
 ```
+### Single player mode:
+1. Navigate to the project root directory.
+2. Run the server using go run or the compiled binary:
+```
+   go run ./cmd/app/
+```
+3. Play the game on your terminal!
+   
+### Running the Server:
+1. Navigate to the project root directory.
+2. Run the server using go run or the compiled binary:
+```
+   go run ./cmd/server/
+   # or ./server_app
+```
+3. The server will log that it has started, usually on localhost:9090 (or configured host/port).
+
+### Running the Client:
+1. Open a new terminal window.
+2. Navigate to the project root directory.
+3. Run the client using go run or the compiled binary, providing a unique username:
+   ```
+   go run ./cmd/client/ -user <your_username>
+   # Example: go run ./cmd/client/ -user Ash
+   # or ./client_app -user Ash
+   ```
+
+Repeat step 3 in another terminal for a second player with a different username.
+
+
 ## Gameplay (Client Commands)
 
 ### Once connected, use the following commands in the client terminal:
