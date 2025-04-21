@@ -16,8 +16,12 @@ func New(config *Config) *Server {
 	}
 }
 
-func (s *Server) Clients() map[string]*Client {
+func (s *Server) GetClients() map[string]*Client {
 	return s.clients
+}
+
+func (s *Server) AddClient(username string, client *Client) {
+	s.clients[username] = client
 }
 
 func (server *Server) Run() {

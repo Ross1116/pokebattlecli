@@ -251,6 +251,8 @@ func (server *Server) startGame(lobby *Lobby) {
 		},
 	})
 
+	server.runGameLoop(lobby.player1, lobby.player2, squad1, squad2, moveset1, moveset2)
+
 	delete(server.Lobbies, lobby.player1.Username)
 	delete(server.Lobbies, lobby.player2.Username)
 }

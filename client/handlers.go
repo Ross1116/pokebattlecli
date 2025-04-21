@@ -106,71 +106,9 @@ func (c *Client) processGameStart(msg Message) {
 		fmt.Printf("- %s\n", pokemon)
 	}
 
-	var yourPokemon, opponentPokemon string
-	var yourMoveset []string
+	c.setupBattleState(yourSquad, opponentSquad)
 
-	if pokemonInterface, ok := msg.Message["your_pokemon"]; ok {
-		yourPokemon, ok = pokemonInterface.(string)
-		if !ok {
-			log.Printf("Invalid your_pokemon format: %T", pokemonInterface)
-			return
-		}
-	}
-
-	if pokemonInterface, ok := msg.Message["opponent_pokemon"]; ok {
-		opponentPokemon, ok = pokemonInterface.(string)
-		if !ok {
-			log.Printf("Invalid opponent_pokemon format: %T", pokemonInterface)
-			return
-		}
-	}
-	if movesInterface, ok := msg.Message["your_moves"]; ok {
-		movesRaw, ok := movesInterface.([]interface{})
-		if !ok {
-			log.Printf("Invalid your_moves format: %T", movesInterface)
-			return
-		}
-
-		yourMoveset = make([]string, len(movesRaw))
-		for i, v := range movesRaw {
-			yourMoveset[i], ok = v.(string)
-			if !ok {
-				log.Printf("Non-string move in your_moves: %T", v)
-				return
-			}
-		}
-	}
-
-	if yourMoveset == nil {
-		if movesInterface, ok := msg.Message["opponent_moves"]; ok {
-			movesRaw, ok := movesInterface.([]interface{})
-			if !ok {
-				log.Printf("Invalid opponent_moves format: %T", movesInterface)
-				return
-			}
-
-			yourMoveset = make([]string, len(movesRaw))
-			for i, v := range movesRaw {
-				yourMoveset[i], ok = v.(string)
-				if !ok {
-					log.Printf("Non-string move in opponent_moves: %T", v)
-					return
-				}
-			}
-		}
-	}
-
-	fmt.Println("\n=================BATTLE START===================")
-	fmt.Printf("\n%s vs %s\n", yourPokemon, opponentPokemon)
-	fmt.Println("\nAvailable Moves:")
-
-	for i, move := range yourMoveset {
-		fmt.Printf("%d. %s\n", i+1, move)
-	}
-	fmt.Println("0. Switch Pokemon\n")
-
-	fmt.Print("Select your action (0 - 5):")
-
+	c.startGameMode()
 }
 
 func (c *Client) processGameEnd(msg Message) {
@@ -186,6 +124,10 @@ func (c *Client) processGameEnd(msg Message) {
 		return
 	}
 
+	if c.GameActive {
+		c.endGameMode()
+	}
+
 	c.InMatch = false
 	opponent := c.Opponent
 	c.Opponent = ""
@@ -198,4 +140,29 @@ func (c *Client) processGameEnd(msg Message) {
 	default:
 		fmt.Printf("Match with %s ended: %s\n", opponent, result)
 	}
+}
+
+func (c *Client) processGameUpdate(msg Message) {
+
+	if messages, ok := msg.Message["battle_messages"].([]interface{}); ok {
+		for _, msgInterface := range messages {
+			if battleMsg, ok := msgInterface.(string); ok {
+				fmt.Println(battleMsg)
+			}
+		}
+	}
+}
+
+// Add this method to set up the battle state
+func (c *Client) setupBattleState(yourSquad, opponentSquad []string) {
+	// This would initialize your battle state with the squads received from the server
+	// For now, this is a stub - you would need to implement this with your battle system
+	fmt.Println("\nSetting up battle with received squads...")
+
+	// You would replace this with actual initialization from your battle system:
+	// c.PlayerSquad, c.EnemySquad, c.PlayerMovesets, c.EnemyMovesets, c.PlayerActiveIdx, c.EnemyActiveIdx =
+	//     battle.SetupSpecificSquads(yourSquad, opponentSquad)
+
+	// This should also initialize:
+	// c.PlayerMaxHPs and c.EnemyMaxHPs
 }

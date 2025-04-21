@@ -44,3 +44,8 @@ type PlayerView struct {
 	TurnNumber        int
 	LastActionResult  string
 }
+
+type Request struct {
+	Type    string                 `json:"type"`
+	Message map[string]interface{} `json:"message"`
+}

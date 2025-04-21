@@ -36,6 +36,7 @@ func NewBattleState(p1Username, p2Username string, p1Team, p2Team []*battle.Batt
 }
 
 type PlayerAction struct {
+	Type          string
 	ActionIndex   int // 1 - 4 move, 0 switch
 	SwitchToIndex int
 }
@@ -45,4 +46,12 @@ type TurnResult struct {
 	DamageDealt   map[string]float64
 	StatusChanges map[string]string
 	Switches      map[string]int
+}
+
+func (b *BattleState) GetActivePokemons() (*battle.BattlePokemon, *battle.BattlePokemon) {
+	return b.Player1Team[b.Player1ActiveIndex], b.Player2Team[b.Player2ActiveIndex]
+}
+
+func (b *BattleState) IsGameOver() bool {
+	return battle.IsAllFainted(b.Player1Team) || battle.IsAllFainted(b.Player2Team)
 }
