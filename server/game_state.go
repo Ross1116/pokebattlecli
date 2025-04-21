@@ -37,7 +37,7 @@ func NewBattleState(p1Username, p2Username string, p1Team, p2Team []*battle.Batt
 
 type PlayerAction struct {
 	Type          string
-	ActionIndex   int // 1 - 4 move, 0 switch
+	ActionIndex   int
 	SwitchToIndex int
 }
 
@@ -49,6 +49,10 @@ type TurnResult struct {
 }
 
 func (b *BattleState) GetActivePokemons() (*battle.BattlePokemon, *battle.BattlePokemon) {
+	if b.Player1ActiveIndex < 0 || b.Player1ActiveIndex >= len(b.Player1Team) ||
+		b.Player2ActiveIndex < 0 || b.Player2ActiveIndex >= len(b.Player2Team) {
+		return nil, nil
+	}
 	return b.Player1Team[b.Player1ActiveIndex], b.Player2Team[b.Player2ActiveIndex]
 }
 

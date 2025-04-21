@@ -35,6 +35,12 @@ type Client struct {
 	EnemyMaxHPs      []float64
 }
 
+type PlayerAction struct {
+	Type          string `json:"type"`
+	ActionIndex   int    `json:"actionIndex"` // 1-4 for move, 0 for switch
+	SwitchToIndex int    `json:"switchToIndex"`
+}
+
 type Message struct {
 	Type    string                 `json:"type"`
 	Message map[string]interface{} `json:"message"`

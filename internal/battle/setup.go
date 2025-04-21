@@ -224,10 +224,10 @@ func SetupMPSquad() ([]*BattlePokemon, []*BattlePokemon, [][]*pokemon.MoveInfo, 
 	playerSquadBase := pokemon.SelectRandSquad()
 	enemySquadBase := pokemon.SelectRandSquad()
 
-	playerSelect := 1
+	playerSelect := 0
 	playerActiveIndex := playerSelect
 
-	enemySelect := 1
+	enemySelect := 0
 	enemyActiveIndex := enemySelect
 
 	fmt.Printf("You sent out %s!\n", playerSquadBase[playerSelect].Name)

@@ -2,8 +2,7 @@ package server
 
 import (
 	"net"
-
-	"github.com/ross1116/pokebattlecli/internal/battle"
+	"sync"
 )
 
 type Server struct {
@@ -11,11 +10,17 @@ type Server struct {
 	port    string
 	clients map[string]*Client
 	Lobbies map[string]*Lobby
+	mu      sync.RWMutex
 }
 
 type Client struct {
 	Conn     net.Conn
 	Username string
+
+	startGameSignal chan struct{}
+	endGameSignal   chan struct{}
+
+	gameActionChan chan []byte
 }
 
 type Lobby struct {
@@ -33,19 +38,18 @@ type Response struct {
 	Message map[string]interface{} `json:"message"`
 }
 
-type PlayerView struct {
-	YourTeam          []battle.PokemonSummary
-	OpponentTeam      []battle.PokemonSummary
-	AvailableMoves    []int
-	CanSwitch         bool
-	AvailableSwitches []int
-	Weather           string
-	FieldEffects      map[string]int
-	TurnNumber        int
-	LastActionResult  string
-}
-
 type Request struct {
 	Type    string                 `json:"type"`
 	Message map[string]interface{} `json:"message"`
 }
+
+func NewClient(conn net.Conn, username string) *Client {
+	return &Client{
+		Conn:            conn,
+		Username:        username,
+		startGameSignal: make(chan struct{}),
+		endGameSignal:   make(chan struct{}),
+		gameActionChan:  make(chan []byte, 5),
+	}
+}
+

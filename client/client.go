@@ -81,24 +81,25 @@ func (c *Client) handleIncomingMessages() {
 	defer c.Conn.Close()
 	defer func() { c.Connected = false }()
 
-	buffer := make([]byte, 1024)
+	decoder := json.NewDecoder(c.Conn)
 
 	for {
-		n, err := c.Conn.Read(buffer)
-		if err != nil {
-			log.Printf("Connection closed: %v", err)
+		var msg Message
+		if err := decoder.Decode(&msg); err != nil {
+			log.Printf("Connection closed or error: %v", err)
 			break
 		}
 
-		var msg Message
-		if err := json.Unmarshal(buffer[:n], &msg); err != nil {
-			log.Printf("Failed to parse message: %v", err)
-			continue
-		}
+		log.Printf("Received message of type: %s", msg.Type)
 
+		// Process the message
 		c.ProcessMessage(msg)
 
-		c.MessageChan <- msg
+		// If this is a turn_request, don't send to message channel
+		// to avoid duplicate processing
+		if msg.Type != "turn_request" {
+			c.MessageChan <- msg
+		}
 	}
 }
 
@@ -114,6 +115,12 @@ func (c *Client) ProcessMessage(msg Message) {
 		c.processMatchStart(msg)
 	case "game_start":
 		c.processGameStart(msg)
+	case "turn_request":
+		c.handleTurnRequest(msg)
+	case "turn_result":
+		c.handleTurnResult(msg)
+	case "opponent_disconnected":
+		c.handleOpponentDisconnected(msg)
 	case "game_end":
 		c.processGameEnd(msg)
 	default:
@@ -134,8 +141,18 @@ func (c *Client) Run() {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		input := scanner.Text()
-		args := strings.Fields(input)
 
+		if !c.Connected {
+			log.Println("Not connected to server")
+			return
+		}
+
+		if c.GameActive {
+			c.handleGameInput(input)
+			continue
+		}
+
+		args := strings.Fields(input)
 		if len(args) == 0 {
 			continue
 		}
