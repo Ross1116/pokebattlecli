@@ -19,6 +19,7 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 	p1Client, p1Exists := server.clients[player1.Username]
 	p2Client, p2Exists := server.clients[player2.Username]
 	if !p1Exists || !p2Exists || p1Client.Conn == nil || p2Client.Conn == nil {
+		log.Printf("Player disconnected before game loop could start...")
 		server.mu.Unlock()
 		return
 	}
@@ -28,7 +29,29 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 	log.Printf("Lobby confirmed/updated at start of runGameLoop for %s and %s", player1.Username, player2.Username)
 	server.mu.Unlock()
 
-	defer func() {}()
+	defer func() {
+		log.Printf("runGameLoop ending for %s and %s. Cleaning up lobby and signaling.", player1.Username, player2.Username)
+		server.mu.Lock()
+		delete(server.Lobbies, player1.Username)
+		delete(server.Lobbies, player2.Username)
+		log.Printf("Lobby removed via defer in runGameLoop for %s and %s", player1.Username, player2.Username)
+		server.mu.Unlock()
+		if player1.endGameSignal != nil {
+			select {
+			case <-player1.endGameSignal:
+			default:
+				close(player1.endGameSignal)
+			}
+		}
+		if player2.endGameSignal != nil {
+			select {
+			case <-player2.endGameSignal:
+			default:
+				close(player2.endGameSignal)
+			}
+		}
+		log.Printf("Game end signaled to HandleClients for %s and %s", player1.Username, player2.Username)
+	}()
 
 	for {
 		p1Connected := player1.Conn != nil
@@ -54,7 +77,6 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 			action, err := receiveGameAction(player2.gameActionChan, player2.Username)
 			actionResultChan2 <- receivedAction{action: action, err: err}
 		}()
-
 		var action1, action2 PlayerAction
 		var err1, err2 error
 		resultsReceived := 0
@@ -80,9 +102,8 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 				resultsReceived++
 			}
 		}
-
 		if err1 != nil || err2 != nil {
-			log.Printf("Turn %d: Errors detected during action receive (%v / %v), continuing outer loop for connection check.", battleState.TurnNumber, err1, err2)
+			log.Printf("Turn %d: Errors detected during action receive (%v / %v), ending game.", battleState.TurnNumber, err1, err2)
 			if err1 != nil && player1.Conn != nil {
 				player1.Conn.Close()
 				player1.Conn = nil
@@ -91,60 +112,59 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 				player2.Conn.Close()
 				player2.Conn = nil
 			}
-			continue
+			return
 		}
 
 		log.Printf("Turn %d: Processing actions for %s and %s", battleState.TurnNumber, player1.Username, player2.Username)
 		player1Pokemon := battleState.Player1Team[battleState.Player1ActiveIndex]
 		player2Pokemon := battleState.Player2Team[battleState.Player2ActiveIndex]
-		move1 := getMoveFromAction(action1, moveset1[battleState.Player1ActiveIndex])
-		move2 := getMoveFromAction(action2, moveset2[battleState.Player2ActiveIndex])
-		first, second, firstMove, secondMove := battle.ResolveTurn(player1Pokemon, player2Pokemon, move1, move2)
 		turnSummary := []string{}
-		var firstPlayerUsername, secondPlayerUsername string
-		if first.UniqueID == player1Pokemon.UniqueID {
-			firstPlayerUsername = player1.Username
-			secondPlayerUsername = player2.Username
-		} else {
-			firstPlayerUsername = player2.Username
-			secondPlayerUsername = player1.Username
-		}
+		var player1Move, player2Move *pokemon.MoveInfo
 
 		if action1.Type == "switch" {
-			if first.UniqueID == player1Pokemon.UniqueID {
-				firstMove = nil
+			targetIdx := action1.SwitchToIndex
+			if targetIdx >= 0 && targetIdx < len(battleState.Player1Team) && !battleState.Player1Team[targetIdx].Fainted && targetIdx != battleState.Player1ActiveIndex {
+				battleState.Player1ActiveIndex = targetIdx
+				player1Pokemon = battleState.Player1Team[battleState.Player1ActiveIndex]
+				turnSummary = append(turnSummary, fmt.Sprintf("%s switched to %s!", player1.Username, player1Pokemon.Base.Name))
+				player1Move = nil
 			} else {
-				secondMove = nil
+				turnSummary = append(turnSummary, fmt.Sprintf("%s tried to switch but failed!", player1.Username))
+				player1Move = nil
+			}
+		} else {
+			player1Move = getMoveFromAction(action1, moveset1[battleState.Player1ActiveIndex])
+			if player1Move == nil {
+				turnSummary = append(turnSummary, fmt.Sprintf("%s failed to select a valid move!", player1.Username))
 			}
 		}
+
 		if action2.Type == "switch" {
-			if first.UniqueID == player2Pokemon.UniqueID {
-				firstMove = nil
+			targetIdx := action2.SwitchToIndex
+			if targetIdx >= 0 && targetIdx < len(battleState.Player2Team) && !battleState.Player2Team[targetIdx].Fainted && targetIdx != battleState.Player2ActiveIndex {
+				battleState.Player2ActiveIndex = targetIdx
+				player2Pokemon = battleState.Player2Team[battleState.Player2ActiveIndex]
+				turnSummary = append(turnSummary, fmt.Sprintf("%s switched to %s!", player2.Username, player2Pokemon.Base.Name))
+				player2Move = nil
 			} else {
-				secondMove = nil
+				turnSummary = append(turnSummary, fmt.Sprintf("%s tried to switch but failed!", player2.Username))
+				player2Move = nil
+			}
+		} else {
+			player2Move = getMoveFromAction(action2, moveset2[battleState.Player2ActiveIndex])
+			if player2Move == nil {
+				turnSummary = append(turnSummary, fmt.Sprintf("%s failed to select a valid move!", player2.Username))
 			}
 		}
-		if firstMove != nil && !first.Fainted {
-			turnSummary = append(turnSummary, fmt.Sprintf("%s (%s) used %s!", first.Base.Name, firstPlayerUsername, firstMove.Name))
-			if second.Fainted {
-				turnSummary = append(turnSummary, fmt.Sprintf("%s (%s) fainted!", second.Base.Name, secondPlayerUsername))
-			}
-		} else if action1.Type != "switch" && action2.Type != "switch" {
+
+		if player1Move != nil || player2Move != nil {
+			battleEvents := battle.ExecuteBattleTurn(player1Pokemon, player2Pokemon, player1Move, player2Move)
+			turnSummary = append(turnSummary, battleEvents...)
+		} else if action1.Type == "switch" && action2.Type == "switch" {
+			turnSummary = append(turnSummary, "Both players switched Pokemon!")
+		} else {
+			turnSummary = append(turnSummary, "Neither Pokemon could make a move!")
 		}
-		if secondMove != nil && !second.Fainted {
-			turnSummary = append(turnSummary, fmt.Sprintf("%s (%s) used %s!", second.Base.Name, secondPlayerUsername, secondMove.Name))
-			if first.Fainted {
-				turnSummary = append(turnSummary, fmt.Sprintf("%s (%s) fainted!", first.Base.Name, firstPlayerUsername))
-			}
-		} else if !second.Fainted && ((second.UniqueID == player1Pokemon.UniqueID && action1.Type == "move") || (second.UniqueID == player2Pokemon.UniqueID && action2.Type == "move")) {
-		}
-		if !player1Pokemon.Fainted {
-			player1Pokemon.HandleTurnEffects()
-		}
-		if !player2Pokemon.Fainted {
-			player2Pokemon.HandleTurnEffects()
-		}
-		turnSummary = append(turnSummary, "...End of turn effects applied...")
 
 		log.Printf("Turn %d: Sending results to %s and %s", battleState.TurnNumber, player1.Username, player2.Username)
 		battleState.LastTurnResults = turnSummary
@@ -272,4 +292,3 @@ func getMoveFromAction(action PlayerAction, moves []*pokemon.MoveInfo) *pokemon.
 	// Return the selected move
 	return moves[action.ActionIndex-1]
 }
-

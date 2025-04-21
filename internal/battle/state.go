@@ -433,3 +433,4 @@ func IsAllFainted(team []*BattlePokemon) bool {
 //
 // 	return turnEvents
 // }
+
