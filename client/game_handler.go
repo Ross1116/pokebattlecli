@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -46,6 +47,7 @@ func (c *Client) endGameMode() {
 	c.PlayerMaxHPs = nil
 	c.EnemyMaxHPs = nil
 	c.LastTurnDescription = nil
+	c.LastAvailableMovesInfo = nil
 	fmt.Println("\n=== Exited Battle Mode ===")
 	log.Println("Exited game mode.")
 }
@@ -56,18 +58,28 @@ func (c *Client) handleTurnRequest(msg Message) {
 		return
 	}
 	c.AwaitingForcedSwitch = false
-
 	turnNumberF, _ := msg.Message["turn"].(float64)
 	turnNumber := int(turnNumberF)
-	availableMovesInterface, _ := msg.Message["available_moves"].([]interface{})
-	availableMoves := make([]string, len(availableMovesInterface))
-	for i, move := range availableMovesInterface {
-		availableMoves[i], _ = move.(string)
-	}
 	forceSwitch, _ := msg.Message["force_switch"].(bool)
+	c.LastAvailableMovesInfo = nil
+	if movesInfoInterface, ok := msg.Message["available_moves_info"]; ok {
+		jsonBytes, err := json.Marshal(movesInfoInterface)
+		if err == nil {
+			var movesInfo []MoveStateInfo
+			err = json.Unmarshal(jsonBytes, &movesInfo)
+			if err == nil {
+				c.LastAvailableMovesInfo = movesInfo
+			} else {
+				log.Printf("Error unmarshaling available_moves_info: %v", err)
+			}
+		} else {
+			log.Printf("Error marshaling available_moves_info for unmarshal: %v", err)
+		}
+	} else {
+		log.Println("Warning: 'available_moves_info' not found in turn_request. PP info unavailable.")
+	}
 
 	fmt.Printf("\n=== TURN %d === vs %s\n", turnNumber, c.Opponent)
-
 	fmt.Println("\nYour Squad:")
 	if c.PlayerSquad == nil || len(c.PlayerSquad) == 0 || c.PlayerMaxHPs == nil {
 		fmt.Println("(Squad information not available)")
@@ -96,7 +108,6 @@ func (c *Client) handleTurnRequest(msg Message) {
 		}
 	}
 	fmt.Println("-------------------------")
-
 	if forceSwitch {
 		fmt.Println("Your active Pokemon has fainted! You must switch.")
 		fmt.Println("Available Pokemon to switch to:")
@@ -119,12 +130,15 @@ func (c *Client) handleTurnRequest(msg Message) {
 		}
 		fmt.Println("-------------------------")
 		fmt.Print("\nEnter action (switch <number>): ")
-
 	} else {
-		if len(availableMoves) > 0 {
-			fmt.Println("Available moves:")
-			for i, move := range availableMoves {
-				fmt.Printf("%d. %s\n", i+1, move)
+		fmt.Println("Available moves:")
+		if c.LastAvailableMovesInfo != nil && len(c.LastAvailableMovesInfo) > 0 {
+			for i, moveInfo := range c.LastAvailableMovesInfo {
+				ppIndicator := ""
+				if moveInfo.CurrentPP <= 0 {
+					ppIndicator = " (NO PP)"
+				}
+				fmt.Printf("%d. %-15s (%d/%d PP)%s\n", i+1, moveInfo.Name, moveInfo.CurrentPP, moveInfo.MaxPP, ppIndicator)
 			}
 		} else {
 			fmt.Println("No moves available!")
@@ -135,6 +149,7 @@ func (c *Client) handleTurnRequest(msg Message) {
 }
 
 func (c *Client) handleTurnResult(msg Message) {
+	CallClear()
 	c.applyBattleStateUpdate(msg)
 
 	fmt.Println("\n=== TURN RESULT ===")
@@ -147,27 +162,41 @@ func (c *Client) handleTurnResult(msg Message) {
 	}
 
 	yourHpPercent, oppHpPercent := 0.0, 0.0
+	yourPokemonName := "(Your Pokemon)"
+	opponentPokemonName := "(Opponent)"
+
 	if c.PlayerSquad != nil && c.PlayerActiveIdx >= 0 && c.PlayerActiveIdx < len(c.PlayerSquad) {
 		poke := c.PlayerSquad[c.PlayerActiveIdx]
-		if poke != nil && c.PlayerActiveIdx < len(c.PlayerMaxHPs) {
+		if poke != nil && poke.Base != nil && c.PlayerActiveIdx < len(c.PlayerMaxHPs) {
+			yourPokemonName = poke.Base.Name
 			maxHP := c.PlayerMaxHPs[c.PlayerActiveIdx]
 			if maxHP > 0 {
 				yourHpPercent = math.Max(0, math.Min(100, (poke.CurrentHP/maxHP)*100.0))
 			}
+		} else {
+			log.Printf("Warning: Could not get player active Pokemon data (Index: %d, Squad Len: %d)", c.PlayerActiveIdx, len(c.PlayerSquad))
 		}
 	}
+
 	if c.EnemySquad != nil && c.EnemyActiveIdx >= 0 && c.EnemyActiveIdx < len(c.EnemySquad) {
 		poke := c.EnemySquad[c.EnemyActiveIdx]
-		if poke != nil && c.EnemyActiveIdx < len(c.EnemyMaxHPs) {
+		if poke != nil && poke.Base != nil && c.EnemyActiveIdx < len(c.EnemyMaxHPs) {
+			opponentPokemonName = poke.Base.Name
 			maxHP := c.EnemyMaxHPs[c.EnemyActiveIdx]
 			if maxHP > 0 {
 				oppHpPercent = math.Max(0, math.Min(100, (poke.CurrentHP/maxHP)*100.0))
 			}
+		} else {
+			log.Printf("Warning: Could not get opponent active Pokemon data (Index: %d, Squad Len: %d)", c.EnemyActiveIdx, len(c.EnemySquad))
 		}
 	}
-	yourHpStr := fmt.Sprintf("Your Pokemon HP: %.1f%%", yourHpPercent)
-	oppHpStr := fmt.Sprintf("Opponent HP: %.1f%%", oppHpPercent)
-	fmt.Printf("\n--- %-30s | %-30s ---\n", yourHpStr, oppHpStr)
+
+	fmt.Printf("\n---  Your \033[1m%s:\033[0m %.1f%% HP | Enemy \033[1m%s:\033[0m%.1f%% HP ---\n",
+		strings.Title(yourPokemonName),
+		yourHpPercent,
+		strings.Title(opponentPokemonName),
+		oppHpPercent,
+	)
 	fmt.Println("===================")
 }
 
@@ -188,10 +217,8 @@ func (c *Client) handleGameInput(input string) {
 		return
 	}
 	command := strings.ToLower(parts[0])
-
 	if c.AwaitingForcedSwitch {
 		var targetIndex int = -1
-
 		if switchNum, err := strconv.Atoi(command); err == nil && len(parts) == 1 {
 			if switchNum < 1 || switchNum > 6 {
 				fmt.Println("Switch number must be between 1 and 6.")
@@ -217,7 +244,6 @@ func (c *Client) handleGameInput(input string) {
 			fmt.Print("Enter the number of the Pokemon to switch to: ")
 			return
 		}
-
 		if targetIndex == c.PlayerActiveIdx {
 			fmt.Println("Cannot switch to the Pokemon that is already active.")
 			fmt.Print("Enter the number of the Pokemon to switch to: ")
@@ -240,7 +266,6 @@ func (c *Client) handleGameInput(input string) {
 			fmt.Println("Invalid switch index.")
 			fmt.Print("Enter the number of the Pokemon to switch to: ")
 		}
-
 	} else {
 		isFainted := false
 		if c.PlayerSquad != nil && c.PlayerActiveIdx >= 0 && c.PlayerActiveIdx < len(c.PlayerSquad) {
@@ -249,11 +274,17 @@ func (c *Client) handleGameInput(input string) {
 				isFainted = activePoke.Fainted
 			}
 		}
-
 		if !isFainted && len(parts) == 1 {
 			if moveNum, err := strconv.Atoi(parts[0]); err == nil {
-				if moveNum < 1 || moveNum > 4 {
-					fmt.Println("Move number must be between 1 and 4.")
+				moveIndex := moveNum - 1
+				if c.LastAvailableMovesInfo == nil || moveIndex < 0 || moveIndex >= len(c.LastAvailableMovesInfo) {
+					fmt.Println("Invalid move number or move info unavailable.")
+					fmt.Print("Enter your action: ")
+					return
+				}
+				selectedMove := c.LastAvailableMovesInfo[moveIndex]
+				if selectedMove.CurrentPP <= 0 {
+					fmt.Printf("Move '%s' has no PP left!\n", selectedMove.Name)
 					fmt.Print("Enter your action: ")
 					return
 				}
@@ -261,7 +292,6 @@ func (c *Client) handleGameInput(input string) {
 				return
 			}
 		}
-
 		if len(parts) < 2 {
 			fmt.Println("Invalid command format. Use 'move <number>' or 'switch <number>'.")
 			fmt.Print("Enter your action: ")
@@ -273,7 +303,6 @@ func (c *Client) handleGameInput(input string) {
 			fmt.Print("Enter your action: ")
 			return
 		}
-
 		switch command {
 		case "move", "m":
 			if isFainted {
@@ -286,8 +315,19 @@ func (c *Client) handleGameInput(input string) {
 				fmt.Print("Enter your action: ")
 				return
 			}
+			moveIndex0Based := actionIndex - 1
+			if c.LastAvailableMovesInfo == nil || moveIndex0Based < 0 || moveIndex0Based >= len(c.LastAvailableMovesInfo) {
+				fmt.Println("Invalid move number or move info unavailable.")
+				fmt.Print("Enter your action: ")
+				return
+			}
+			selectedMove := c.LastAvailableMovesInfo[moveIndex0Based]
+			if selectedMove.CurrentPP <= 0 {
+				fmt.Printf("Move '%s' has no PP left!\n", selectedMove.Name)
+				fmt.Print("Enter your action: ")
+				return
+			}
 			c.sendGameAction("move", actionIndex, 0)
-
 		case "switch", "s":
 			if actionIndex < 1 || actionIndex > 6 {
 				fmt.Println("Switch index must be between 1 and 6.")
@@ -318,7 +358,6 @@ func (c *Client) handleGameInput(input string) {
 				return
 			}
 			c.sendGameAction("switch", 0, targetIndex)
-
 		default:
 			fmt.Println("Unknown command. Use 'move <number>' or 'switch <number>'.")
 			fmt.Print("Enter your action: ")
@@ -329,18 +368,15 @@ func (c *Client) handleGameInput(input string) {
 func (c *Client) sendGameAction(actionType string, moveIndex, switchIndex int) {
 	actionStr := fmt.Sprintf("%s|%s|%d|%d", GameActionMarker, actionType, moveIndex, switchIndex)
 	log.Printf("Sending game action: %s", actionStr)
-
 	if c.Conn == nil || !c.Connected {
 		log.Println("Error: Cannot send game action, not connected.")
 		fmt.Println("Error: Connection lost.")
 		c.Disconnect()
 		return
 	}
-
 	c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	_, err := c.Conn.Write([]byte(actionStr))
 	c.Conn.SetWriteDeadline(time.Time{})
-
 	if err != nil {
 		log.Printf("Failed to send game action: %v", err)
 		fmt.Println("Error sending action. Disconnecting.")

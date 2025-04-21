@@ -13,6 +13,12 @@ type Config struct {
 	Username   string
 }
 
+type MoveStateInfo struct {
+	Name      string `json:"name"`
+	CurrentPP int    `json:"current_pp"`
+	MaxPP     int    `json:"max_pp"`
+}
+
 type Client struct {
 	Config      *Config
 	Conn        net.Conn
@@ -21,16 +27,16 @@ type Client struct {
 	InMatch     bool
 	MessageChan chan Message
 
-	GameActive           bool
-	AwaitingForcedSwitch bool
-	GameInputChannel     chan string
-	PlayerSquad          []*battle.BattlePokemon
-	EnemySquad           []*battle.BattlePokemon
-	PlayerActiveIdx      int
-	EnemyActiveIdx       int
-	PlayerMaxHPs         []float64
-	EnemyMaxHPs          []float64
-	LastTurnDescription  []string
+	GameActive             bool
+	AwaitingForcedSwitch   bool
+	PlayerSquad            []*battle.BattlePokemon
+	EnemySquad             []*battle.BattlePokemon
+	PlayerActiveIdx        int
+	EnemyActiveIdx         int
+	PlayerMaxHPs           []float64
+	EnemyMaxHPs            []float64
+	LastTurnDescription    []string
+	LastAvailableMovesInfo []MoveStateInfo
 }
 
 type PlayerAction struct {
@@ -49,5 +55,4 @@ func Marshal(data map[string]string) ([]byte, error) {
 }
 
 const GameActionMarker = "GAME_ACTION_MARKER"
-
 const SwitchActionMarker = "SWITCH_ACTION_MARKER"
