@@ -21,15 +21,16 @@ type Client struct {
 	InMatch     bool
 	MessageChan chan Message
 
-	GameActive          bool
-	GameInputChannel    chan string
-	PlayerSquad         []*battle.BattlePokemon
-	EnemySquad          []*battle.BattlePokemon
-	PlayerActiveIdx     int
-	EnemyActiveIdx      int
-	PlayerMaxHPs        []float64
-	EnemyMaxHPs         []float64
-	LastTurnDescription []string
+	GameActive           bool
+	AwaitingForcedSwitch bool
+	GameInputChannel     chan string
+	PlayerSquad          []*battle.BattlePokemon
+	EnemySquad           []*battle.BattlePokemon
+	PlayerActiveIdx      int
+	EnemyActiveIdx       int
+	PlayerMaxHPs         []float64
+	EnemyMaxHPs          []float64
+	LastTurnDescription  []string
 }
 
 type PlayerAction struct {
@@ -47,3 +48,6 @@ func Marshal(data map[string]string) ([]byte, error) {
 	return json.Marshal(data)
 }
 
+const GameActionMarker = "GAME_ACTION_MARKER"
+
+const SwitchActionMarker = "SWITCH_ACTION_MARKER"

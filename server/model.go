@@ -53,3 +53,6 @@ func NewClient(conn net.Conn, username string) *Client {
 	}
 }
 
+const GameActionMarker = "GAME_ACTION_MARKER"
+
+const SwitchActionMarker = "SWITCH_ACTION_MARKER"

@@ -40,19 +40,13 @@ func getSquadStateInfo(squad []*battle.BattlePokemon) []PokemonStateInfo {
 		} else {
 			log.Printf("Warning: Could not get HP base stat for %s", p.Base.Name)
 		}
-
 		hpPercent := 0.0
 		if maxHP > 0 {
 			hpPercent = math.Max(0, math.Min(100, (p.CurrentHP/maxHP)*100.0))
 		}
 		info[i] = PokemonStateInfo{
-			SquadIndex: i,
-			Name:       p.Base.Name,
-			CurrentHP:  p.CurrentHP,
-			MaxHP:      maxHP,
-			HPPercent:  hpPercent,
-			Fainted:    p.Fainted,
-			Status:     p.Status,
+			SquadIndex: i, Name: p.Base.Name, CurrentHP: p.CurrentHP, MaxHP: maxHP,
+			HPPercent: hpPercent, Fainted: p.Fainted, Status: p.Status,
 		}
 	}
 	return info
@@ -82,7 +76,6 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 		delete(server.Lobbies, player2.Username)
 		log.Printf("Lobby removed via defer in runGameLoop for %s and %s", player1.Username, player2.Username)
 		server.mu.Unlock()
-
 		if player1.endGameSignal != nil {
 			select {
 			case <-player1.endGameSignal:
@@ -118,20 +111,16 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 		p2Lost := battle.IsAllFainted(battleState.Player2Team)
 		if p1Lost || p2Lost {
 			log.Printf("Game over detected at start of Turn %d. P1 Lost: %v, P2 Lost: %v", battleState.TurnNumber, p1Lost, p2Lost)
-
-			resultP1 := "lose"
-			resultP2 := "win"
+			resultP1, resultP2 := "lose", "win"
 			if p1Lost && p2Lost {
-				resultP1 = "draw"
-				resultP2 = "draw"
-			} else if p1Lost {
-				resultP1 = "lose"
-				resultP2 = "win"
-			} else if p2Lost {
-				resultP1 = "win"
-				resultP2 = "lose"
+				resultP1, resultP2 = "draw", "draw"
 			}
-
+			if p1Lost {
+				resultP1, resultP2 = "lose", "win"
+			}
+			if p2Lost {
+				resultP1, resultP2 = "win", "lose"
+			}
 			if player1.Conn != nil {
 				server.sendGameEnd(player1, player2, resultP1)
 			}
@@ -141,46 +130,40 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 			return
 		}
 
-		if battleState.Player1Team[battleState.Player1ActiveIndex].Fainted {
-			log.Printf("Turn %d: Player 1's %s is fainted. Forcing switch action request.", battleState.TurnNumber, battleState.Player1Team[battleState.Player1ActiveIndex].Base.Name)
-			p1Moves := []string{}
+		p1MustSwitchAtTurnStart := battleState.Player1Team[battleState.Player1ActiveIndex].Fainted
+		p2MustSwitchAtTurnStart := battleState.Player2Team[battleState.Player2ActiveIndex].Fainted
+		log.Printf("Turn %d: Start of turn faint check: P1 Must Switch: %t, P2 Must Switch: %t", battleState.TurnNumber, p1MustSwitchAtTurnStart, p2MustSwitchAtTurnStart)
+
+		if p1MustSwitchAtTurnStart {
 			server.SendResponse(player1.Conn, Response{Type: "turn_request", Message: map[string]interface{}{
-				"turn":            battleState.TurnNumber,
-				"available_moves": p1Moves,
-				"force_switch":    true,
+				"turn": battleState.TurnNumber, "available_moves": []string{}, "force_switch": true,
 			}})
 		} else {
 			p1Moves := extractMoveNames(moveset1[battleState.Player1ActiveIndex])
 			server.SendResponse(player1.Conn, Response{Type: "turn_request", Message: map[string]interface{}{
-				"turn":            battleState.TurnNumber,
-				"available_moves": p1Moves,
-				"force_switch":    false,
+				"turn": battleState.TurnNumber, "available_moves": p1Moves, "force_switch": false,
 			}})
 		}
-
-		if battleState.Player2Team[battleState.Player2ActiveIndex].Fainted {
-			log.Printf("Turn %d: Player 2's %s is fainted. Forcing switch action request.", battleState.TurnNumber, battleState.Player2Team[battleState.Player2ActiveIndex].Base.Name)
-			p2Moves := []string{}
+		if p2MustSwitchAtTurnStart {
 			server.SendResponse(player2.Conn, Response{Type: "turn_request", Message: map[string]interface{}{
-				"turn":            battleState.TurnNumber,
-				"available_moves": p2Moves,
-				"force_switch":    true,
+				"turn": battleState.TurnNumber, "available_moves": []string{}, "force_switch": true,
 			}})
 		} else {
 			p2Moves := extractMoveNames(moveset2[battleState.Player2ActiveIndex])
 			server.SendResponse(player2.Conn, Response{Type: "turn_request", Message: map[string]interface{}{
-				"turn":            battleState.TurnNumber,
-				"available_moves": p2Moves,
-				"force_switch":    false,
+				"turn": battleState.TurnNumber, "available_moves": p2Moves, "force_switch": false,
 			}})
 		}
-
-		log.Printf("Turn %d: Sent turn/switch requests to %s and %s", battleState.TurnNumber, player1.Username, player2.Username)
+		log.Printf("Turn %d: Sent turn requests to %s and %s", battleState.TurnNumber, player1.Username, player2.Username)
 
 		actionResultChan1 := make(chan receivedAction)
 		actionResultChan2 := make(chan receivedAction)
-		go func() { actionResultChan1 <- receiveGameAction(player1.gameActionChan, player1.Username) }()
-		go func() { actionResultChan2 <- receiveGameAction(player2.gameActionChan, player2.Username) }()
+		go func() {
+			actionResultChan1 <- receiveGameAction(player1.gameActionChan, player1.Username, GameActionMarker)
+		}()
+		go func() {
+			actionResultChan2 <- receiveGameAction(player2.gameActionChan, player2.Username, GameActionMarker)
+		}()
 
 		var action1, action2 PlayerAction
 		var err1, err2 error
@@ -203,7 +186,6 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 				resultsReceived++
 			}
 		}
-
 		if err1 != nil || err2 != nil {
 			log.Printf("Turn %d: Errors/disconnects during action receive (%s:%v / %s:%v), ending game.", battleState.TurnNumber, player1.Username, err1, player2.Username, err2)
 			if err1 != nil && player2.Conn != nil {
@@ -222,119 +204,166 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 			}
 			return
 		}
-
 		log.Printf("Turn %d: Received actions: P1=%+v, P2=%+v", battleState.TurnNumber, action1, action2)
 
-		p1ForcedSwitch := battleState.Player1Team[battleState.Player1ActiveIndex].Fainted
-		p2ForcedSwitch := battleState.Player2Team[battleState.Player2ActiveIndex].Fainted
-
-		if p1ForcedSwitch && action1.Type != "switch" {
-			log.Printf("Turn %d: Player 1 %s was forced to switch but sent action type '%s'. Treating as failed action.", battleState.TurnNumber, player1.Username, action1.Type)
+		if p1MustSwitchAtTurnStart && action1.Type != "switch" {
+			log.Printf("Turn %d: Player 1 %s was forced to switch but sent action type '%s'. Invalidating action.", battleState.TurnNumber, player1.Username, action1.Type)
 			action1 = PlayerAction{Type: "switch", SwitchToIndex: -1}
 		}
-		if p2ForcedSwitch && action2.Type != "switch" {
-			log.Printf("Turn %d: Player 2 %s was forced to switch but sent action type '%s'. Treating as failed action.", battleState.TurnNumber, player2.Username, action2.Type)
+		if p2MustSwitchAtTurnStart && action2.Type != "switch" {
+			log.Printf("Turn %d: Player 2 %s was forced to switch but sent action type '%s'. Invalidating action.", battleState.TurnNumber, player2.Username, action2.Type)
 			action2 = PlayerAction{Type: "switch", SwitchToIndex: -1}
 		}
 
 		log.Printf("Turn %d: Processing actions for %s and %s", battleState.TurnNumber, player1.Username, player2.Username)
-		p1Acting := battleState.Player1Team[battleState.Player1ActiveIndex]
-		p2Acting := battleState.Player2Team[battleState.Player2ActiveIndex]
-
 		turnSummary := []string{}
 		var player1Move, player2Move *pokemon.MoveInfo
-
 		p1Switched := false
+		p2Switched := false
+
 		if action1.Type == "switch" {
 			targetIdx := action1.SwitchToIndex
 			if targetIdx >= 0 && targetIdx < len(battleState.Player1Team) && !battleState.Player1Team[targetIdx].Fainted && targetIdx != battleState.Player1ActiveIndex {
 				battleState.Player1ActiveIndex = targetIdx
-				p1Acting = battleState.Player1Team[battleState.Player1ActiveIndex]
-				turnSummary = append(turnSummary, fmt.Sprintf("%s switched to %s!", player1.Username, p1Acting.Base.Name))
-				player1Move = nil
+				turnSummary = append(turnSummary, fmt.Sprintf("%s switched to %s!", player1.Username, battleState.Player1Team[targetIdx].Base.Name))
 				p1Switched = true
 			} else {
 				errMsg := fmt.Sprintf("%s tried to switch but failed!", player1.Username)
-				if p1ForcedSwitch {
+				if p1MustSwitchAtTurnStart {
 					errMsg = fmt.Sprintf("%s failed to select a valid Pokemon to switch to!", player1.Username)
 				}
 				turnSummary = append(turnSummary, errMsg)
-				player1Move = nil
 			}
+			player1Move = nil
 		}
-
-		p2Switched := false
 		if action2.Type == "switch" {
 			targetIdx := action2.SwitchToIndex
 			if targetIdx >= 0 && targetIdx < len(battleState.Player2Team) && !battleState.Player2Team[targetIdx].Fainted && targetIdx != battleState.Player2ActiveIndex {
 				battleState.Player2ActiveIndex = targetIdx
-				p2Acting = battleState.Player2Team[battleState.Player2ActiveIndex]
-				turnSummary = append(turnSummary, fmt.Sprintf("%s switched to %s!", player2.Username, p2Acting.Base.Name))
-				player2Move = nil
+				turnSummary = append(turnSummary, fmt.Sprintf("%s switched to %s!", player2.Username, battleState.Player2Team[targetIdx].Base.Name))
 				p2Switched = true
 			} else {
 				errMsg := fmt.Sprintf("%s tried to switch but failed!", player2.Username)
-				if p2ForcedSwitch {
+				if p2MustSwitchAtTurnStart {
 					errMsg = fmt.Sprintf("%s failed to select a valid Pokemon to switch to!", player2.Username)
 				}
 				turnSummary = append(turnSummary, errMsg)
-				player2Move = nil
 			}
+			player2Move = nil
 		}
 
 		if !p1Switched && action1.Type == "move" {
-			originalP1Idx := battleState.Player1ActiveIndex
-			if p1Switched {
-			}
-			player1Move = getMoveFromAction(action1, moveset1[originalP1Idx])
+			player1Move = getMoveFromAction(action1, moveset1[battleState.Player1ActiveIndex])
 			if player1Move == nil {
 				turnSummary = append(turnSummary, fmt.Sprintf("%s failed to select a valid move!", player1.Username))
 			}
 		}
 		if !p2Switched && action2.Type == "move" {
-			originalP2Idx := battleState.Player2ActiveIndex
-			if p2Switched {
-			}
-			player2Move = getMoveFromAction(action2, moveset2[originalP2Idx])
+			player2Move = getMoveFromAction(action2, moveset2[battleState.Player2ActiveIndex])
 			if player2Move == nil {
 				turnSummary = append(turnSummary, fmt.Sprintf("%s failed to select a valid move!", player2.Username))
 			}
 		}
 
+		p1FinalActing := battleState.Player1Team[battleState.Player1ActiveIndex]
+		p2FinalActing := battleState.Player2Team[battleState.Player2ActiveIndex]
 		if player1Move != nil || player2Move != nil {
-			p1FinalActing := battleState.Player1Team[battleState.Player1ActiveIndex]
-			p2FinalActing := battleState.Player2Team[battleState.Player2ActiveIndex]
 			battleEvents := battle.ExecuteBattleTurn(p1FinalActing, p2FinalActing, player1Move, player2Move)
 			turnSummary = append(turnSummary, battleEvents...)
-		} else if p1Switched && p2Switched {
-		} else if p1Switched || p2Switched {
 		} else {
 			if len(turnSummary) == 0 {
 				turnSummary = append(turnSummary, "Neither Pokemon could make a move!")
 			}
 		}
 
-		log.Printf("Turn %d: Sending results to %s and %s", battleState.TurnNumber, player1.Username, player2.Username)
-		battleState.LastTurnResults = turnSummary
+		p1FaintedThisTurn := p1FinalActing.Fainted
+		p2FaintedThisTurn := p2FinalActing.Fainted
+		log.Printf("Turn %d: Mid-turn faint check: P1 Fainted: %t, P2 Fainted: %t", battleState.TurnNumber, p1FaintedThisTurn, p2FaintedThisTurn)
 
+		if p1FaintedThisTurn && !battle.IsAllFainted(battleState.Player1Team) {
+			log.Printf("Turn %d: Player 1's %s fainted mid-turn. Requesting switch.", battleState.TurnNumber, p1FinalActing.Base.Name)
+			server.SendResponse(player1.Conn, Response{Type: "switch_request", Message: map[string]interface{}{
+				"reason": "Pokemon fainted",
+			}})
+			switchAction1, switchErr1 := receiveSwitchAction(player1.gameActionChan, player1.Username)
+			if switchErr1 != nil {
+				log.Printf("Turn %d: Error receiving switch action from %s: %v. Ending game.", battleState.TurnNumber, player1.Username, switchErr1)
+				if player2.Conn != nil {
+					server.SendResponse(player2.Conn, Response{Type: "opponent_disconnected", Message: map[string]interface{}{"opponent": player1.Username, "reason": "Switch Timeout/Error"}})
+				}
+				if player1.Conn != nil {
+					player1.Conn.Close()
+					player1.Conn = nil
+				}
+				return
+			}
+			targetIdx := switchAction1.SwitchToIndex
+			if targetIdx >= 0 && targetIdx < len(battleState.Player1Team) && !battleState.Player1Team[targetIdx].Fainted {
+				battleState.Player1ActiveIndex = targetIdx
+				turnSummary = append([]string{fmt.Sprintf("%s switched to %s!", player1.Username, battleState.Player1Team[targetIdx].Base.Name)}, turnSummary...)
+				log.Printf("Turn %d: Player 1 switched to %s.", battleState.TurnNumber, battleState.Player1Team[targetIdx].Base.Name)
+			} else {
+				log.Printf("Turn %d: Player 1 %s sent invalid switch index %d. Ending game.", battleState.TurnNumber, player1.Username, targetIdx)
+				turnSummary = append([]string{fmt.Sprintf("%s failed to choose a valid Pokemon!", player1.Username)}, turnSummary...)
+				if player2.Conn != nil {
+					server.SendResponse(player2.Conn, Response{Type: "opponent_disconnected", Message: map[string]interface{}{"opponent": player1.Username, "reason": "Invalid Switch Choice"}})
+				}
+				if player1.Conn != nil {
+					player1.Conn.Close()
+					player1.Conn = nil
+				}
+				return
+			}
+		}
+
+		if p2FaintedThisTurn && !battle.IsAllFainted(battleState.Player2Team) {
+			log.Printf("Turn %d: Player 2's %s fainted mid-turn. Requesting switch.", battleState.TurnNumber, p2FinalActing.Base.Name)
+			server.SendResponse(player2.Conn, Response{Type: "switch_request", Message: map[string]interface{}{"reason": "Pokemon fainted"}})
+			switchAction2, switchErr2 := receiveSwitchAction(player2.gameActionChan, player2.Username)
+			if switchErr2 != nil {
+				log.Printf("Turn %d: Error receiving switch action from %s: %v. Ending game.", battleState.TurnNumber, player2.Username, switchErr2)
+				if player1.Conn != nil {
+					server.SendResponse(player1.Conn, Response{Type: "opponent_disconnected", Message: map[string]interface{}{"opponent": player2.Username, "reason": "Switch Timeout/Error"}})
+				}
+				if player2.Conn != nil {
+					player2.Conn.Close()
+					player2.Conn = nil
+				}
+				return
+			}
+			targetIdx := switchAction2.SwitchToIndex
+			if targetIdx >= 0 && targetIdx < len(battleState.Player2Team) && !battleState.Player2Team[targetIdx].Fainted {
+				battleState.Player2ActiveIndex = targetIdx
+				turnSummary = append([]string{fmt.Sprintf("%s switched to %s!", player2.Username, battleState.Player2Team[targetIdx].Base.Name)}, turnSummary...)
+				log.Printf("Turn %d: Player 2 switched to %s.", battleState.TurnNumber, battleState.Player2Team[targetIdx].Base.Name)
+			} else {
+				log.Printf("Turn %d: Player 2 %s sent invalid switch index %d. Ending game.", battleState.TurnNumber, player2.Username, targetIdx)
+				turnSummary = append([]string{fmt.Sprintf("%s failed to choose a valid Pokemon!", player2.Username)}, turnSummary...)
+				if player1.Conn != nil {
+					server.SendResponse(player1.Conn, Response{Type: "opponent_disconnected", Message: map[string]interface{}{"opponent": player2.Username, "reason": "Invalid Switch Choice"}})
+				}
+				if player2.Conn != nil {
+					player2.Conn.Close()
+					player2.Conn = nil
+				}
+				return
+			}
+		}
+
+		log.Printf("Turn %d: Sending final results to %s and %s", battleState.TurnNumber, player1.Username, player2.Username)
+		battleState.LastTurnResults = turnSummary
 		p1SquadState := getSquadStateInfo(battleState.Player1Team)
 		p2SquadState := getSquadStateInfo(battleState.Player2Team)
-
 		resultMsgP1 := map[string]interface{}{
-			"description":           turnSummary,
-			"your_squad_state":      p1SquadState,
-			"opponent_squad_state":  p2SquadState,
-			"your_active_index":     battleState.Player1ActiveIndex,
-			"opponent_active_index": battleState.Player2ActiveIndex,
+			"description":      turnSummary,
+			"your_squad_state": p1SquadState, "opponent_squad_state": p2SquadState,
+			"your_active_index": battleState.Player1ActiveIndex, "opponent_active_index": battleState.Player2ActiveIndex,
 		}
 		resultMsgP2 := map[string]interface{}{
-			"description":           turnSummary,
-			"your_squad_state":      p2SquadState,
-			"opponent_squad_state":  p1SquadState,
-			"your_active_index":     battleState.Player2ActiveIndex,
-			"opponent_active_index": battleState.Player1ActiveIndex,
+			"description":      turnSummary,
+			"your_squad_state": p2SquadState, "opponent_squad_state": p1SquadState,
+			"your_active_index": battleState.Player2ActiveIndex, "opponent_active_index": battleState.Player1ActiveIndex,
 		}
-
 		if player1.Conn != nil {
 			server.SendResponse(player1.Conn, Response{Type: "turn_result", Message: resultMsgP1})
 		}
@@ -346,8 +375,7 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 		p2LostAfterTurn := battle.IsAllFainted(battleState.Player2Team)
 		if p1LostAfterTurn || p2LostAfterTurn {
 			log.Printf("Game over detected *after* Turn %d results sent. P1 Lost: %v, P2 Lost: %v", battleState.TurnNumber, p1LostAfterTurn, p2LostAfterTurn)
-			resultP1 := "lose"
-			resultP2 := "win"
+			resultP1, resultP2 := "lose", "win"
 			if p1LostAfterTurn && p2LostAfterTurn {
 				resultP1, resultP2 = "draw", "draw"
 			}
@@ -357,7 +385,6 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 			if p2LostAfterTurn {
 				resultP1, resultP2 = "win", "lose"
 			}
-
 			if player1.Conn != nil {
 				server.sendGameEnd(player1, player2, resultP1)
 			}
@@ -371,6 +398,41 @@ func (server *Server) runGameLoop(player1, player2 *Client, squad1, squad2 []*ba
 	}
 }
 
+func receiveSwitchAction(actionChan <-chan []byte, username string) (PlayerAction, error) {
+	var action PlayerAction
+	receiveTimeout := time.After(65 * time.Second)
+
+	select {
+	case data, ok := <-actionChan:
+		if !ok {
+			return action, fmt.Errorf("action channel closed for %s during switch request", username)
+		}
+		msgStr := strings.TrimSpace(string(data))
+		log.Printf("receiveSwitchAction (%s): Received data from channel: %q", username, msgStr)
+
+		if strings.HasPrefix(msgStr, SwitchActionMarker+"|") {
+			parts := strings.Split(msgStr, "|")
+			if len(parts) == 2 {
+				switchIdx, err := strconv.Atoi(parts[1])
+				if err != nil {
+					return action, fmt.Errorf("invalid number format in switch action from %s: %s", username, msgStr)
+				}
+				if switchIdx < 0 || switchIdx > 5 {
+					return action, fmt.Errorf("invalid switch index %d from %s", switchIdx, username)
+				}
+				action.Type = "switch"
+				action.SwitchToIndex = switchIdx
+				log.Printf("Parsed switch action from %s: SwitchToIndex=%d", username, action.SwitchToIndex)
+				return action, nil
+			}
+		}
+		return action, fmt.Errorf("invalid switch action format received from %s: %s", username, msgStr)
+
+	case <-receiveTimeout:
+		return action, fmt.Errorf("timeout waiting for switch action from %s", username)
+	}
+}
+
 func (server *Server) sendGameEnd(playerToSendTo, opponent *Client, result string) {
 	if playerToSendTo == nil || playerToSendTo.Conn == nil {
 		return
@@ -379,7 +441,6 @@ func (server *Server) sendGameEnd(playerToSendTo, opponent *Client, result strin
 	if opponent != nil {
 		opponentUsername = opponent.Username
 	}
-
 	message := fmt.Sprintf("Match against %s ended.", opponentUsername)
 	switch result {
 	case "win":
@@ -389,15 +450,10 @@ func (server *Server) sendGameEnd(playerToSendTo, opponent *Client, result strin
 	case "draw":
 		message = fmt.Sprintf("The match against %s ended in a draw!", opponentUsername)
 	}
-
 	log.Printf("Sending game_end to %s: Result=%s", playerToSendTo.Username, result)
 	server.SendResponse(playerToSendTo.Conn, Response{
-		Type: "game_end",
-		Message: map[string]interface{}{
-			"result":   result,
-			"opponent": opponentUsername,
-			"message":  message,
-		},
+		Type:    "game_end",
+		Message: map[string]interface{}{"result": result, "opponent": opponentUsername, "message": message},
 	})
 }
 
@@ -421,7 +477,7 @@ type receivedAction struct {
 	err    error
 }
 
-func receiveGameAction(actionChan <-chan []byte, username string) receivedAction {
+func receiveGameAction(actionChan <-chan []byte, username string, expectedMarker string) receivedAction {
 	var action PlayerAction
 	receiveTimeout := time.After(65 * time.Second)
 
@@ -431,34 +487,47 @@ func receiveGameAction(actionChan <-chan []byte, username string) receivedAction
 			return receivedAction{err: fmt.Errorf("action channel closed for %s", username)}
 		}
 		msgStr := strings.TrimSpace(string(data))
-		log.Printf("receiveGameAction (%s): Received data from channel: %q", username, msgStr)
+		log.Printf("receiveGameAction (%s): Received data expecting '%s': %q", username, expectedMarker, msgStr)
 
-		if strings.HasPrefix(msgStr, "GAME_ACTION_MARKER|") {
-			parts := strings.Split(msgStr, "|")
-			if len(parts) == 4 {
-				action.Type = parts[1]
-				actionIdx, errIdx := strconv.Atoi(parts[2])
-				switchIdx, errSwp := strconv.Atoi(parts[3])
+		if strings.HasPrefix(msgStr, expectedMarker+"|") {
+			prefixLen := len(expectedMarker) + 1
+			payload := msgStr[prefixLen:]
 
-				if errIdx != nil || errSwp != nil {
-					return receivedAction{err: fmt.Errorf("invalid number format in action from %s: %s", username, msgStr)}
+			if expectedMarker == GameActionMarker {
+				parts := strings.Split(payload, "|")
+				if len(parts) == 3 {
+					action.Type = parts[0]
+					actionIdx, errIdx := strconv.Atoi(parts[1])
+					switchIdx, errSwp := strconv.Atoi(parts[2])
+					if errIdx != nil || errSwp != nil {
+						return receivedAction{err: fmt.Errorf("invalid number format in game action from %s: %s", username, msgStr)}
+					}
+					if (action.Type != "move" && action.Type != "switch") || (action.Type == "move" && (actionIdx < 1 || actionIdx > 4)) || (action.Type == "switch" && (switchIdx < 0 || switchIdx > 5)) {
+						return receivedAction{err: fmt.Errorf("invalid game action parameters from %s: %s", username, msgStr)}
+					}
+					action.ActionIndex = actionIdx
+					action.SwitchToIndex = switchIdx
+					log.Printf("Parsed game action from %s: Type=%s, ActionIndex=%d, SwitchToIndex=%d", username, action.Type, action.ActionIndex, action.SwitchToIndex)
+					return receivedAction{action: action, err: nil}
 				}
-				if (action.Type != "move" && action.Type != "switch") ||
-					(action.Type == "move" && (actionIdx < 1 || actionIdx > 4)) ||
-					(action.Type == "switch" && (switchIdx < 0 || switchIdx > 5)) {
-					return receivedAction{err: fmt.Errorf("invalid action parameters from %s: %s", username, msgStr)}
+			} else if expectedMarker == SwitchActionMarker {
+				switchIdx, err := strconv.Atoi(payload)
+				if err != nil {
+					return receivedAction{err: fmt.Errorf("invalid number format in switch action from %s: %s", username, msgStr)}
 				}
-
-				action.ActionIndex = actionIdx
+				if switchIdx < 0 || switchIdx > 5 {
+					return receivedAction{err: fmt.Errorf("invalid switch index %d from %s", switchIdx, username)}
+				}
+				action.Type = "switch"
 				action.SwitchToIndex = switchIdx
-				log.Printf("Parsed game action from %s: Type=%s, ActionIndex=%d, SwitchToIndex=%d", username, action.Type, action.ActionIndex, action.SwitchToIndex)
+				log.Printf("Parsed switch action from %s: SwitchToIndex=%d", username, action.SwitchToIndex)
 				return receivedAction{action: action, err: nil}
 			}
 		}
-		return receivedAction{err: fmt.Errorf("invalid game action format received from %s: %s", username, msgStr)}
+		return receivedAction{err: fmt.Errorf("invalid/unexpected action format received from %s: %s", username, msgStr)}
 
 	case <-receiveTimeout:
-		return receivedAction{err: fmt.Errorf("timeout waiting for action from %s", username)}
+		return receivedAction{err: fmt.Errorf("timeout waiting for action (%s) from %s", expectedMarker, username)}
 	}
 }
 
@@ -480,4 +549,3 @@ func getMoveFromAction(action PlayerAction, moves []*pokemon.MoveInfo) *pokemon.
 	}
 	return move
 }
-
