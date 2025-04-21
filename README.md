@@ -12,7 +12,7 @@ This project allows users to connect to a central server, find other players, an
 * **Player Management:** User registration and listing of currently connected players.
 * **Matchmaking:** Allows players to challenge each other to battles.
 * **Turn-Based Battles:** Simulates Pokémon battles turn by turn.
-* **Dynamic Data:** Fetches Pokémon base stats and move details.
+* **Dynamic Data:** Fetches Pokémon base stats and move details from PokéApi (Huge thanks to them for the data and API).
 * **Battle Mechanics:** Implements core mechanics like:
     * HP calculation and tracking.
     * Move execution and damage calculation.
