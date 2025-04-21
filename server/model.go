@@ -1,6 +1,10 @@
 package server
 
-import "net"
+import (
+	"net"
+
+	"github.com/ross1116/pokebattlecli/internal/battle"
+)
 
 type Server struct {
 	host    string
@@ -27,4 +31,16 @@ type Config struct {
 type Response struct {
 	Type    string                 `json:"type"`
 	Message map[string]interface{} `json:"message"`
+}
+
+type PlayerView struct {
+	YourTeam          []battle.PokemonSummary
+	OpponentTeam      []battle.PokemonSummary
+	AvailableMoves    []int
+	CanSwitch         bool
+	AvailableSwitches []int
+	Weather           string
+	FieldEffects      map[string]int
+	TurnNumber        int
+	LastActionResult  string
 }

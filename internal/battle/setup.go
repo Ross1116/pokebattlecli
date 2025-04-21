@@ -242,7 +242,7 @@ func SetupMPSquad() ([]*BattlePokemon, []*BattlePokemon, [][]*pokemon.MoveInfo, 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
-	fmt.Println("\nLoading movesets in parallel (with optimizations)...")
+	fmt.Println("\nLoading movesets")
 
 	for i, base := range playerSquadBase {
 		wg.Add(1)
