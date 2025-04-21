@@ -5,7 +5,6 @@ import (
 	"net"
 
 	"github.com/ross1116/pokebattlecli/internal/battle"
-	"github.com/ross1116/pokebattlecli/internal/pokemon"
 )
 
 type Config struct {
@@ -22,22 +21,20 @@ type Client struct {
 	InMatch     bool
 	MessageChan chan Message
 
-	// Game state
-	GameActive       bool
-	GameInputChannel chan string
-	PlayerSquad      []*battle.BattlePokemon
-	EnemySquad       []*battle.BattlePokemon
-	PlayerMovesets   [][]pokemon.MoveInfo
-	EnemyMovesets    [][]pokemon.MoveInfo
-	PlayerActiveIdx  int
-	EnemyActiveIdx   int
-	PlayerMaxHPs     []float64
-	EnemyMaxHPs      []float64
+	GameActive          bool
+	GameInputChannel    chan string
+	PlayerSquad         []*battle.BattlePokemon
+	EnemySquad          []*battle.BattlePokemon
+	PlayerActiveIdx     int
+	EnemyActiveIdx      int
+	PlayerMaxHPs        []float64
+	EnemyMaxHPs         []float64
+	LastTurnDescription []string
 }
 
 type PlayerAction struct {
 	Type          string `json:"type"`
-	ActionIndex   int    `json:"actionIndex"` // 1-4 for move, 0 for switch
+	ActionIndex   int    `json:"actionIndex"`
 	SwitchToIndex int    `json:"switchToIndex"`
 }
 
@@ -49,3 +46,4 @@ type Message struct {
 func Marshal(data map[string]string) ([]byte, error) {
 	return json.Marshal(data)
 }
+

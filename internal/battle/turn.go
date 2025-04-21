@@ -209,7 +209,7 @@ func processAction(attacker *BattlePokemon, defender *BattlePokemon, move *pokem
 			events = append(events, fmt.Sprintf("It had no effect on %s!", defender.Base.Name))
 		}
 	} else {
-		events = append(events, fmt.Sprintf("...%s used status move %s...", attacker.Base.Name, move.Name))
+		events = append(events, fmt.Sprintf("...%s used a 0 damage move %s with effects %s...", attacker.Base.Name, move.Name, move.EffectEntries))
 	}
 	return events
 }
@@ -227,4 +227,3 @@ func processAction(attacker *BattlePokemon, defender *BattlePokemon, move *pokem
 // 	}
 // 	return effectiveness
 // }
-
