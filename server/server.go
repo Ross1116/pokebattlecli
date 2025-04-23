@@ -137,6 +137,10 @@ func (server *Server) HandleClient(conn net.Conn) {
 					server.mu.Lock()
 					existingClient, exists := server.clients[usernameFromMsg]
 					if exists {
+						existingClient.Conn = conn
+						existingClient.startGameSignal = make(chan struct{})
+						existingClient.endGameSignal = make(chan struct{})
+						existingClient.gameActionChan = make(chan []byte, 5)
 						client = existingClient
 					} else {
 						client = NewClient(conn, usernameFromMsg)
@@ -194,4 +198,3 @@ func (server *Server) HandleClient(conn net.Conn) {
 		}
 	}
 }
-
