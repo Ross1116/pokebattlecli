@@ -20,7 +20,7 @@ func New(config *Config) *Client {
 }
 
 func (c *Client) Connect() error {
-	serverAddr := fmt.Sprintf("%s:%s", c.Config.ServerHost, c.Config.ServerPort)
+	serverAddr := fmt.Sprintf("[%s]:%s", c.Config.ServerHost, c.Config.ServerPort)
 	if strings.Contains(c.Config.ServerHost, ":") && !strings.HasPrefix(c.Config.ServerHost, "[") {
 		serverAddr = fmt.Sprintf("[%s]:%s", c.Config.ServerHost, c.Config.ServerPort)
 	}
@@ -151,39 +151,56 @@ func (c *Client) ProcessMessage(msg Message) {
 }
 
 func (c *Client) Disconnect() {
-	if c.Connected && c.Conn != nil {
+	if c.Conn != nil {
 		log.Println("Disconnecting client...")
 		c.Conn.Close()
-		c.Connected = false
-		if c.GameActive {
-			c.endGameMode()
-		}
+		c.Conn = nil
+	}
+	c.Connected = false
+	if c.GameActive || c.AwaitingForcedSwitch {
+		c.endGameMode()
 	}
 }
 
 func (c *Client) Run() {
-	if !c.Connected {
-		fmt.Println("Failed to connect initially.")
-		return
+	if err := c.Connect(); err != nil {
+		fmt.Printf("Initial connection failed: %v\n", err)
+		fmt.Println("You are disconnected. Use 'connect' to try again or 'quit' to exit.")
+	} else {
+		fmt.Println("Connected to server. Type 'help' for commands.")
 	}
-	fmt.Println("Connected to server. Type 'help' for commands.")
-	fmt.Print("> ")
+
+	prompt := "> "
+	if !c.Connected {
+		prompt = "(disconnected)> "
+	}
+	fmt.Print(prompt)
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
-		if !c.Connected {
-			log.Println("Connection lost.")
-			fmt.Println("Connection to server lost. Please restart the client.")
-			break
+		input := strings.TrimSpace(scanner.Text())
+
+		if c.Connected {
+			prompt = "> "
+		} else {
+			prompt = "(disconnected)> "
 		}
 
-		input := strings.TrimSpace(scanner.Text())
 		if input == "" {
-			fmt.Print("> ")
+			if !c.GameActive && !c.AwaitingForcedSwitch {
+				fmt.Print(prompt)
+			}
 			continue
 		}
 
 		if c.GameActive || c.AwaitingForcedSwitch {
+			if !c.Connected {
+				fmt.Println("\nConnection lost during game action.")
+				c.endGameMode()
+				prompt = "(disconnected)> "
+				fmt.Print(prompt)
+				continue
+			}
 			c.handleGameInput(input)
 			continue
 		}
@@ -194,43 +211,80 @@ func (c *Client) Run() {
 		switch command {
 		case "help":
 			fmt.Println("\nAvailable commands:")
-			fmt.Println("  players          - List online players")
-			fmt.Println("  match <username> - Challenge a player to a battle")
-			fmt.Println("  quit             - Disconnect and exit")
-			fmt.Print("> ")
-		case "players":
-			if err := c.GetPlayers(); err != nil {
-				fmt.Printf("Error getting players: %v\n> ", err)
+			if c.Connected {
+				fmt.Println("  players          - List online players")
+				fmt.Println("  match <username> - Challenge a player to a battle")
+			} else {
+				fmt.Println("  connect          - Attempt to connect/reconnect to the server")
 			}
+			fmt.Println("  quit             - Disconnect and exit")
+			fmt.Print(prompt)
+
+		case "quit":
+			fmt.Println("Disconnecting and exiting...")
+			c.Disconnect()
+			fmt.Println("Exited.")
+			return
+
+		case "connect":
+			if c.Connected {
+				fmt.Println("Already connected.")
+			} else {
+				fmt.Println("Attempting to connect...")
+				if err := c.Connect(); err != nil {
+					fmt.Printf("Connection attempt failed: %v\n", err)
+				} else {
+					fmt.Println("Successfully connected and registered!")
+				}
+			}
+			if c.Connected {
+				fmt.Print("> ")
+			} else {
+				fmt.Print("(disconnected)> ")
+			}
+
+		case "players":
+			if !c.Connected {
+				fmt.Println("Not connected to server. Use 'connect' to try again.")
+				fmt.Print(prompt)
+				continue
+			}
+			if err := c.GetPlayers(); err != nil {
+				fmt.Printf("Error getting players: %v\n", err)
+			}
+
 		case "match":
+			if !c.Connected {
+				fmt.Println("Not connected to server. Use 'connect' to try again.")
+				fmt.Print(prompt)
+				continue
+			}
 			if len(args) < 2 {
 				fmt.Println("Usage: match <username>")
-				fmt.Print("> ")
+				fmt.Print(prompt)
 				continue
 			}
 			opponent := args[1]
 			if opponent == c.Config.Username {
 				fmt.Println("You cannot match with yourself.")
-				fmt.Print("> ")
+				fmt.Print(prompt)
 				continue
 			}
+
 			fmt.Printf("Attempting to match with %s...\n", opponent)
 			if err := c.Matchmake(opponent); err != nil {
-				fmt.Printf("Error starting match: %v\n> ", err)
+				fmt.Printf("Error starting match: %v\n", err)
 			}
-		case "quit":
-			fmt.Println("Disconnecting...")
-			c.Disconnect()
-			fmt.Println("Exited.")
-			return
+
 		default:
 			fmt.Println("Unknown command. Type 'help' for a list of commands.")
-			fmt.Print("> ")
+			fmt.Print(prompt)
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
 		log.Printf("Error reading input: %v", err)
 	}
+	c.Disconnect()
 	log.Println("Client Run loop finished.")
 }
