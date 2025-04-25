@@ -213,17 +213,3 @@ func processAction(attacker *BattlePokemon, defender *BattlePokemon, move *pokem
 	}
 	return events
 }
-
-// func effectivenessCheck(move *pokemon.MoveInfo, defender *BattlePokemon) float64 {
-// 	effectiveness := 1.0
-// 	if defender.Base != nil && defender.Base.Types != nil && move != nil && pokemon.TypeEffectiveness != nil {
-// 		for _, t := range defender.Base.Types {
-// 			if attackerEffectiveness, ok := pokemon.TypeEffectiveness[move.Type.Name]; ok {
-// 				if mult, ok2 := attackerEffectiveness[t.Type.Name]; ok2 {
-// 					effectiveness *= mult
-// 				}
-// 			}
-// 		}
-// 	}
-// 	return effectiveness
-// }

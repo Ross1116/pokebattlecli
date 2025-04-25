@@ -31,7 +31,6 @@ func FetchData[T any](url string, result *T) error {
 	cacheLock.RUnlock()
 
 	if exists && timeExists && time.Now().Before(expiryTime) {
-		// Use cached data
 		return json.Unmarshal(cachedData, result)
 	}
 
@@ -46,10 +45,9 @@ func FetchData[T any](url string, result *T) error {
 		return err
 	}
 
-	// Store in cache
 	cacheLock.Lock()
 	cache[url] = body
-	cacheTTL[url] = time.Now().Add(1 * time.Hour) // Cache for 1 hour
+	cacheTTL[url] = time.Now().Add(1 * time.Hour)
 	cacheLock.Unlock()
 
 	return json.Unmarshal(body, result)
@@ -90,13 +88,11 @@ func FetchMoveByName(name string) (*MoveInfo, error) {
 	return FetchMoveData(url)
 }
 
-// Helper function to fetch moves concurrently
 func FetchMovesInParallel(moveURLs []string) ([]*MoveInfo, error) {
 	moves := make([]*MoveInfo, len(moveURLs))
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(moveURLs))
 
-	// Limit concurrency
 	semaphore := make(chan struct{}, 10)
 	var resultLock sync.Mutex
 
